@@ -641,7 +641,16 @@ function personRating(pid){const r=[];state.projects.forEach(p=>p.members.forEac
 function teamRating(p){const r=p.members.filter(m=>m.rating).map(m=>m.rating);return r.length?r.reduce((a,b)=>a+b,0)/r.length:null;}
 const personActive=pid=>state.projects.filter(p=>p.status==='active'&&p.members.some(m=>m.personId===pid&&!m.removedAt));
 function defaultLogMonth(){const d=new Date();let y=d.getFullYear(),m=d.getMonth()+1;if(d.getDate()<=10){m--;if(m===0){m=12;y--;}}return{y,m};}
-function seriesColors(p){const used=new Set(),map={};p.members.forEach(m=>{const per=getPer(m.personId);let c=tagColor(per&&per.tag);if(used.has(c))c=(TAGS.map(t=>t.color).find(x=>!used.has(x)))||c;used.add(c);map[m.personId]=c;});return map;}
+/* Grafy: když má víc položek stejnou barvu (např. lidé ze stejné firmy), každá další dostane
+   stejný odstín jen o kousek tmavší/světlejší, aby se v grafu daly rozlišit. */
+function hexToHsl(hex){const n=parseInt(hex.slice(1),16),r=(n>>16&255)/255,g=(n>>8&255)/255,b=(n&255)/255,mx=Math.max(r,g,b),mn=Math.min(r,g,b);let h=0,s=0;const l=(mx+mn)/2;
+  if(mx!==mn){const d=mx-mn;s=l>0.5?d/(2-mx-mn):d/(mx+mn);h=mx===r?(g-b)/d+(g<b?6:0):mx===g?(b-r)/d+2:(r-g)/d+4;h/=6;}return[h,s,l];}
+function hslToHex(h,s,l){const f=n=>{const k=(n+h*12)%12,a=s*Math.min(l,1-l),c=l-a*Math.max(-1,Math.min(k-3,9-k,1));return Math.round(c*255).toString(16).padStart(2,'0');};return '#'+f(0)+f(8)+f(4);}
+const SHADE_STEPS=[0,-0.13,0.12,-0.23,0.21,-0.31,0.06,-0.07,0.17];
+function shadeColor(hex,i){if(!i)return hex;const [h,s,l]=hexToHsl(hex),d=SHADE_STEPS[i%SHADE_STEPS.length]||0;return hslToHex(h,s,Math.max(0.2,Math.min(0.85,l+d)));}
+function distinctColors(items){const seen={},map={};items.forEach(({id,base})=>{const i=seen[base]||0;seen[base]=i+1;map[id]=shadeColor(base,i);});return map;}
+function seriesColors(p){return distinctColors(p.members.map(m=>{const per=getPer(m.personId);return{id:m.personId,base:tagColor(per&&per.tag)};}));}
+const projColors=ids=>distinctColors(state.projects.filter(p=>ids.has(p.id)).map(p=>({id:p.id,base:tagColor(p.tag)})));
 const runDays=p=>daysBetween(p.created,(p.status==='closed'&&p.closedAt)?p.closedAt:todayISO());
 function durText(p){const d=runDays(p);const months=Math.max(1,ymOf(p.closedAt||todayISO())-ymOf(p.created)+1);return `${d} ${plural(d,'den','dny','dní')} · ${months} ${plural(months,'měsíc','měsíce','měsíců')}`;}
 const fw=(h,d)=>ui.unit==='d'?`${num1(d)} d`:`${fmtNum(h)} h`;
@@ -874,9 +883,9 @@ function timelineChart(p,h){
   const span=spanKeys(p).length,tot=projWork(p),a=span>1?(unit==='d'?tot.d:tot.h)/span:null;
   return stackChart(data,{unit,h,marks,pid:'t'+p.id,avg:a,avgLabel:a?`Ø ${unit==='d'?num1(a)+' d':fmtNum(a)+' h'} / měsíc`:'',label:'Odpracováno po měsících'});
 }
-function personChart(L){
+function personChart(L,cm){cm=cm||{};
   const now=ymNow(),data=[];
-  for(let k=now-WIN;k<now+WIN;k++){const segs=[];const add=(o,f)=>Object.entries(o||{}).forEach(([id,v])=>{const p=getP(id);segs.push({v,c:tagColor(p&&p.tag),f,t:`${p?p.name:''} · ${MONTHS[ymM(k)-1]} ${ymY(k)}${f?' (předpověď)':''}`});});add(L.past[k]);add(L.fut[k],1);data.push({k,segs});}
+  for(let k=now-WIN;k<now+WIN;k++){const segs=[];const add=(o,f)=>Object.entries(o||{}).forEach(([id,v])=>{const p=getP(id);segs.push({v,c:cm[id]||tagColor(p&&p.tag),f,t:`${p?p.name:''} · ${MONTHS[ymM(k)-1]} ${ymY(k)}${f?' (předpověď)':''}`});});add(L.past[k]);add(L.fut[k],1);data.push({k,segs});}
   return stackChart(data,{unit:'d',cap:L.cap,h:250,pid:'pc',label:'Vytížení po měsících'});
 }
 function chartLegend(p){const cols=seriesColors(p);return `<div class="legend">${p.members.map(m=>{const per=getPer(m.personId);return `<span><i class="dot" style="--c:${cols[m.personId]}"></i>${esc(fullName(per))}</span>`;}).join('')}${forecast(p).length?'<span><i class="dot hatch"></i>předpověď</span>':''}</div>`;}
@@ -1013,7 +1022,7 @@ function viewPerson(id){
   const hs=personHistory(id),act=hs.filter(x=>x.p.status==='active'&&!x.m.removedAt),r=personRating(id);
   const totH=hs.reduce((a,x)=>a+x.h,0),totD=hs.reduce((a,x)=>a+x.d,0),totE=hs.reduce((a,x)=>a+x.earned,0),owe=hs.reduce((a,x)=>a+Math.max(0,x.bal||0),0);
   const copy=v=>`<button class="copy" data-act="copy" data-text="${esc(v)}">kopírovat</button>`,L=personLoad(id),n1=L.next[1];
-  const projIds=new Set(),nowK=ymNow();Object.entries(L.past).concat(Object.entries(L.fut)).forEach(([k,o])=>{if(+k>=nowK-WIN&&+k<nowK+WIN)Object.keys(o).forEach(id=>projIds.add(id));});
+  const projIds=new Set(),nowK=ymNow();Object.entries(L.past).concat(Object.entries(L.fut)).forEach(([k,o])=>{if(+k>=nowK-WIN&&+k<nowK+WIN)Object.keys(o).forEach(id=>projIds.add(id));});const pcm=projColors(projIds);
   return `<button class="linkback" data-act="back">← Zpět</button>
   <section class="ph"><div class="perhead">${avatar(per,'xl')}<div><p class="eyebrow">Adresář</p><h1>${esc(fullName(per))}</h1><div class="pos">${esc(per.position||'bez pozice')}</div></div></div>
     <div class="ph-actions"><div class="tagrow" aria-label="Barva">${TAGS.map(t=>`<button class="tagbtn" style="--c:${t.color}" title="${t.name}" aria-pressed="${t.id===per.tag}" data-act="set-tag" data-kind="person" data-id="${per.id}" data-tag="${t.id}"></button>`).join('')}</div>${unitSeg()}<button class="btn" data-act="edit-person" data-id="${per.id}">Upravit</button></div></section>
@@ -1026,7 +1035,7 @@ function viewPerson(id){
     <div class="kpi ${owe>0?'warn':''}"><dt>Dlužím mu/jí</dt><dd>${czk(owe)}</dd></div>
     <div class="kpi"><dt>Průměrné hodnocení</dt><dd>${r?`${num1(r.avg)} <small>z 5 · ${r.n} ${plural(r.n,'projekt','projekty','projektů')}</small>`:'<small>zatím nehodnoceno</small>'}</dd>${r?starsTxt(r.avg):''}</div>
   </dl>
-  <section class="card"><div class="card-h"><h2>Vytížení</h2><div class="legend">${[...projIds].map(id=>{const p=getP(id);return p?`<span><i class="dot" style="--c:${tagColor(p.tag)}"></i>${esc(p.name)}</span>`:'';}).join('')}<span><i class="dot hatch"></i>předpověď</span></div></div>${personChart(L)}<p class="hint">Jen aktivní projekty. Dny po 8 h (nebo podle směny nastavené na projektu). Kapacita ${L.cap} d/měsíc${L.cap!==CAPD()?' (vlastní nastavení)':''}, změníte v Upravit.</p></section>
+  <section class="card"><div class="card-h"><h2>Vytížení</h2><div class="legend">${state.projects.filter(p=>projIds.has(p.id)).map(p=>{return p?`<span><i class="dot" style="--c:${pcm[p.id]}"></i>${esc(p.name)}</span>`:'';}).join('')}<span><i class="dot hatch"></i>předpověď</span></div></div>${personChart(L,pcm)}<p class="hint">Jen aktivní projekty. Dny po 8 h (nebo podle směny nastavené na projektu). Kapacita ${L.cap} d/měsíc${L.cap!==CAPD()?' (vlastní nastavení)':''}, změníte v Upravit.</p></section>
   ${personDays(id)}
   <div class="detail"><div>
     <section class="card"><div class="card-h"><h2>Aktivně pracuje na</h2></div>
@@ -1358,9 +1367,9 @@ function dayStrip(p){
 function personDays(pid){
   const any=state.projects.some(p=>dailyOf(p).some(e=>e.personId===pid));if(!any)return '';
   const k=ui.dayK!=null?ui.dayK:ymNow(),y=ymY(k),m=ymM(k),dim=new Date(Date.UTC(y,m,0)).getUTCDate(),first=(new Date(Date.UTC(y,m-1,1)).getUTCDay()+6)%7;
-  let cells='';for(let i=0;i<first;i++)cells+='<div class="cal-e"></div>';let tot=0;
+  const dcm=projColors(new Set(state.projects.filter(p=>dailyOf(p).some(e=>e.personId===pid)).map(p=>p.id)));let cells='';for(let i=0;i<first;i++)cells+='<div class="cal-e"></div>';let tot=0;
   for(let d=1;d<=dim;d++){const iso=`${y}-${pad(m)}-${pad(d)}`;const ent=[];state.projects.forEach(p=>dailyOf(p).forEach(e=>{if(e.personId===pid&&e.date===iso)ent.push({p,e});}));const h=ent.reduce((a,x)=>a+x.e.hours,0);tot+=h;const wd=(first+d-1)%7;
-    cells+=`<div class="cal-d${wd>=5?' we':''}${iso===todayISO()?' td-today':''}${h?' on':''}" title="${ent.map(x=>`${x.p.name}: ${fmtNum(x.e.hours)} h`).join('\n')}"><span class="cal-n">${d}</span>${h?`<b>${fmtNum(h)} h</b><span class="cal-dots">${ent.map(x=>`<i class="dot" style="--c:${tagColor(x.p.tag)}"></i>`).join('')}</span>`:''}</div>`;}
+    cells+=`<div class="cal-d${wd>=5?' we':''}${iso===todayISO()?' td-today':''}${h?' on':''}" title="${ent.map(x=>`${x.p.name}: ${fmtNum(x.e.hours)} h`).join('\n')}"><span class="cal-n">${d}</span>${h?`<b>${fmtNum(h)} h</b><span class="cal-dots">${ent.map(x=>`<i class="dot" style="--c:${dcm[x.p.id]}"></i>`).join('')}</span>`:''}</div>`;}
   return `<section class="card"><div class="card-h"><h2>Den po dni</h2><div class="mnav"><button class="gear" data-act="day-nav" data-d="-1" aria-label="Předchozí měsíc">‹</button><b>${cap1(MONTHS[m-1])} ${y} · ${fmtNum(tot)} h</b><button class="gear" data-act="day-nav" data-d="1" aria-label="Další měsíc">›</button></div></div>
   <div class="cal">${['po','út','st','čt','pá','so','ne'].map(x=>`<div class="cal-w">${x}</div>`).join('')}${cells}</div><p class="hint">Denní zápisy ze všech projektů. Barevná tečka = projekt.</p></section>`;
 }
