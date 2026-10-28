@@ -619,7 +619,7 @@ function rollupDaily(){let ch=false;const now=ymNow();
       if(!l){p.logs.push({id:uid(),personId:pid,year:y,month:m,hours:Math.round(h*100)/100,auto:true});ch=true;}
       else if(l.auto&&Math.abs(l.hours-h)>0.001){l.hours=Math.round(h*100)/100;ch=true;}});});
   if(ch)save();}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}if(APP.cloud)cloudQueue();}
+function save(){invalidateSched();try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}if(APP.cloud)cloudQueue();}
 
 /* ---------- calculations ---------- */
 const getP=id=>state.projects.find(p=>p.id===id);
@@ -798,21 +798,56 @@ function progressInfo(p){
   const costTotal=cur&&cur>0.02&&cost>0?cost/Math.min(1,cur):null;
   return{spent,cost,est,basis,plan,cur,total,remaining,source,manual,tempo,finish,need,late,suggest,estWarn,costTotal,exhausted};
 }
-function forecast(p){
-  if(p.status!=='active')return [];
-  const pi=progressInfo(p);if(pi.remaining==null||pi.remaining<=0.05)return [];
-  const act=activeMembers(p);if(!act.length)return [];
-  const now=ymNow(),w={};let tw=0;
-  act.forEach(m=>{const h=p.logs.reduce((a,l)=>l.personId===m.personId&&ym(l.year,l.month)>=now-WIN?a+l.hours:a,0);w[m.personId]=h;tw+=h;});
-  if(!tw)act.forEach(m=>{w[m.personId]=1;tw+=1;});
-  const remH=pi.remaining*(+p.hoursPerDay||8),slots=[];
-  let end=null;if(p.deadline&&ymOf(p.deadline)>=now)end=ymOf(p.deadline);if(pi.late&&pi.finish)end=Math.max(end==null?now:end,ymOf(pi.finish));
-  if(end!=null){for(let k=now;k<=end;k++)slots.push([k,remH/(end-now+1)]);}
-  else if(pi.tempo>0){let left=remH,k=now;const t=pi.tempo*(+p.hoursPerDay||8);while(left>0.05&&slots.length<36){const x=Math.min(left,t);slots.push([k,x]);left-=x;k++;}}
-  else slots.push([now,remH]);
-  const out=[];slots.forEach(([k,h])=>act.forEach(m=>{if(w[m.personId])out.push({k,pid:m.personId,hours:h*w[m.personId]/tw,m});}));
-  return out;
+/* Předpověď práce do budoucna – plánuje se po lidech napříč všemi aktivními projekty:
+   1) zbývající práce projektu se rozdělí mezi aktivní lidi podle jejich dosavadního podílu na projektu,
+   2) každý člověk má měsíční kapacitu (dny); práce s deadlinem se rozloží rovnoměrně do deadlinu,
+      přednost mají bližší deadliny; práce bez deadlinu se rozloží v tempu, jakým na projektu pracuje,
+      a když kapacita nestačí, posouvá se do dalších měsíců,
+   3) nad kapacitu jde plán jen když to jinak nejde kvůli deadlinu, a to rovnoměrně. */
+let _sched=null;
+const invalidateSched=()=>{_sched=null;};
+function waterfill(D,ks,rem){const caps=ks.map(k=>Math.max(0,rem[k]||0)),tot=caps.reduce((a,b)=>a+b,0),alloc={};
+  if(tot<=D+1e-9){ks.forEach((k,i)=>alloc[k]=caps[i]);return{alloc,over:D-tot};}
+  let lo=0,hi=Math.max(...caps);for(let it=0;it<50;it++){const x=(lo+hi)/2,sum=caps.reduce((a,c)=>a+Math.min(c,x),0);if(sum<D)lo=x;else hi=x;}
+  ks.forEach((k,i)=>alloc[k]=Math.min(caps[i],hi));return{alloc,over:0};}
+function schedule(){
+  if(_sched)return _sched;
+  const now=ymNow(),H=36,today=todayISO(),dim=new Date(Date.UTC(ymY(now),ymM(now),0)).getUTCDate(),frac=Math.max(0,(dim-(+today.slice(8,10))+1)/dim);
+  const byPerson={};
+  state.projects.forEach(p=>{
+    if(p.status!=='active')return;const pi=progressInfo(p);if(pi.remaining==null||pi.remaining<=0.05)return;
+    const act=activeMembers(p);if(!act.length)return;
+    const tot={};let T=0;act.forEach(m=>{const h=memberHours(p,m.personId);tot[m.personId]=h;T+=h;});
+    if(!T)act.forEach(m=>{tot[m.personId]=1;T+=1;});
+    const remH=pi.remaining*(+p.hoursPerDay||8);
+    let last=null;if(p.deadline&&ymOf(p.deadline)>=now)last=ymOf(p.deadline);
+    const pastDue=!!(p.deadline&&ymOf(p.deadline)<now);
+    act.forEach(m=>{if(!tot[m.personId])return;const days=remH*tot[m.personId]/T/whd(m);if(days<0.01)return;
+      let r=0,n=0;for(let k=now-WIN;k<now;k++){if(k<ymOf(p.created)||!memberInMonth(m,k))continue;n++;r+=p.logs.reduce((a,l)=>l.personId===m.personId&&ym(l.year,l.month)===k?a+l.hours:a,0)/whd(m);}
+      (byPerson[m.personId]=byPerson[m.personId]||[]).push({p,m,days,last,pastDue,rate:n?r/n:0});});
+  });
+  const res={};
+  Object.entries(byPerson).forEach(([pid,tasks])=>{
+    const cap=capOf(getPer(pid)),rem={},wt={};
+    let used=0;state.projects.forEach(p=>{if(p.status!=='active')return;const m=p.members.find(x=>x.personId===pid);if(!m)return;used+=Math.max(logH(p,pid,ymY(now),ymM(now)),dailySum(p,pid,ymY(now),ymM(now)))/whd(m);});
+    for(let k=now;k<now+H;k++){rem[k]=cap;wt[k]=1;}
+    rem[now]=Math.max(0,Math.min(cap-used,cap*frac));wt[now]=frac;
+    const add=(t,k,d)=>{if(d<0.005)return;const key=t.p.id;(res[key]=res[key]||[]).push({k,pid,hours:d*whd(t.m),m:t.m});};
+    const range=(a,b)=>{const o=[];for(let k=a;k<=b;k++)o.push(k);return o;};
+    const dl=tasks.filter(t=>t.last!=null).sort((a,b)=>a.last-b.last||b.days-a.days);
+    dl.forEach(t=>{const ks=range(now,t.last),{alloc,over}=waterfill(t.days,ks,rem);
+      ks.forEach(k=>{rem[k]-=alloc[k];add(t,k,alloc[k]);});
+      if(over>0){const W=ks.reduce((a,k)=>a+wt[k],0)||1;ks.forEach(k=>{const d=over*wt[k]/W;rem[k]-=d;add(t,k,d);});}});
+    const fl=tasks.filter(t=>t.last==null).sort((a,b)=>(b.pastDue-a.pastDue)||a.p.created.localeCompare(b.p.created));
+    fl.forEach(t=>{const pace=t.pastDue?cap:(t.rate>0.05?t.rate:Math.max(1,cap/4));let W=Math.max(1,Math.ceil(t.days/pace)),r;
+      for(;;){const ks=range(now,now+W-1);const free=ks.reduce((a,k)=>a+Math.max(0,rem[k]),0);if(free+1e-9>=t.days||W>=H){r=waterfill(t.days,ks,rem);
+        ks.forEach(k=>{rem[k]-=r.alloc[k];add(t,k,r.alloc[k]);});
+        if(r.over>0){const Wt=ks.reduce((a,k)=>a+wt[k],0)||1;ks.forEach(k=>{const d=r.over*wt[k]/Wt;rem[k]-=d;add(t,k,d);});}
+        break;}W++;}});
+  });
+  _sched=res;return res;
 }
+function forecast(p){if(p.status!=='active')return [];return schedule()[p.id]||[];}
 function personLoad(pid){
   const per=getPer(pid),cap=capOf(per),now=ymNow(),past={},fut={};let first=Infinity;
   state.projects.forEach(p=>{if(p.status!=='active')return;const m=p.members.find(x=>x.personId===pid);if(!m)return;first=Math.min(first,ymOf(m.addedAt));
@@ -958,7 +993,7 @@ function capacityCard(){
   return `<section class="card"><div class="card-h"><h2>Vytížení lidí</h2><span class="hint">jen aktivní projekty · dny práce za měsíc (8 h, případně směna dle nastavení) · šrafovaně = předpoklad · kapacita ${CAPD()} d · ${WIN} měsíců zpět a dopředu</span></div>
   <div class="tscroll"><table class="tbl compact"><thead><tr><th>Člověk</th><th class="num">Ø posl. ${WIN} m.</th>${rows[0]?rows[0].L.next.map(n=>`<th class="num">${mLabel(n.k)}${n.k===now?' *':''}</th>`).join(''):''}</tr></thead><tbody>
   ${rows.map(({per,L})=>`<tr><td><button class="who" data-act="open-person" data-id="${per.id}">${avatar(per)}<span><b>${esc(fullName(per))}</b><small>${esc(per.position||'')}${L.cap!==CAPD()?` · kapacita ${L.cap} d`:''}</small></span></button></td><td class="num"><span class="lc ${loadCls(L.r)}"><b>${num1(L.avg)} d</b> · ${pct(L.r)}</span></td>${L.next.map(cell).join('')}</tr>`).join('')}
-  </tbody></table></div><p class="hint">* aktuální měsíc = už zapsané hodiny + předpověď. Předpověď vychází z hotovo %, odhadu MD, deadlinu a podílu lidí na projektu za posledních ${WIN} měsíců.</p></section>`;
+  </tbody></table></div><p class="hint">* aktuální měsíc = už zapsané hodiny + předpověď. Předpověď: zbývající práce (z hotovo %, odhadu MD nebo rozpočtu) se dělí podle dosavadního podílu lidí na projektu a plánuje se tak, aby nikdo nepřekročil kapacitu. Nad kapacitu jde jen tehdy, když to jinak nejde stihnout do deadlinu.</p></section>`;
 }
 function viewProjects(){
   const q=norm(ui.q.trim());
@@ -1197,6 +1232,7 @@ function viewSummary(id){
 
 /* ---------- render & navigation ---------- */
 function render(){
+  invalidateSched();
   const n=state.projects.filter(p=>p.status==='active').length;
   $('#n-p').textContent=n;$('#n-d').textContent=state.people.length;$('#n-a').textContent=state.projects.length-n;
   const sec=ui.view==='person'?'directory':ui.view==='summary'?'archive':ui.view==='project'?((getP(ui.id)||{}).status==='closed'?'archive':'projects'):ui.view;
