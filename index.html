@@ -470,6 +470,9 @@ th[aria-sort="ascending"],th[aria-sort="descending"]{color:var(--fg)}
 .lr-name b{display:block;font-weight:600}
 .lr-name small{color:var(--muted);font-size:11.5px;display:block}
 .lr-name small.lr-daily{color:var(--info)}
+.lr-name small.lr-daily.diff{color:var(--warn)}
+.sync-d{margin-left:6px;background:var(--surface-2);border:1px solid var(--line-2);color:var(--fg);border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;cursor:pointer}
+.sync-d:hover{border-color:var(--accent)}
 .lr-name small.lr-daily:empty{display:none}
 .lr-in{display:flex;align-items:center;gap:6px}
 .lr-in input{text-align:right;font-family:var(--mono)}
@@ -1316,10 +1319,15 @@ function openLog(pid,y,mo){
     <div class="logtotal"><span>Celkem za měsíc</span><b class="mono" id="fl-tot">0 h</b></div>
     ${footer('Uložit',`<button type="button" class="btn danger" id="fl-del" hidden>Smazat celý měsíc</button>`)}</form>`,{noFocus:true,onMount(md){
       const f=md.querySelector('#fl'),E=f.elements;
-      const recalc=()=>{let t=0;mems.forEach(m=>{const v=parseNum(E['h_'+m.personId].value);t+=v;md.querySelector(`[data-d="${m.personId}"]`).textContent=v?num1(v/memberHPD(p,m))+' d':'';});md.querySelector('#fl-tot').textContent=fmtNum(t)+' h';};
+      const dailyNote=m=>{const el=md.querySelector(`[data-dl="${m.personId}"]`),ds=dailySum(p,m.personId,+E.y.value,+E.m.value);if(!ds){el.innerHTML='';el.classList.remove('diff');return;}
+        const raw=String(E['h_'+m.personId].value).trim(),diff=raw===''||Math.abs(parseNum(raw)-ds)>0.01;el.classList.toggle('diff',diff);
+        el.innerHTML=diff?`denní zápisy: ${fmtNum(ds)} h · měsíční zápis se liší <button type="button" class="sync-d" data-sync="${m.personId}">Srovnat dle denních</button>`:`denní zápisy: ${fmtNum(ds)} h · sedí`;};
+      md.querySelector('.logrows').addEventListener('click',e=>{const b=e.target.closest('[data-sync]');if(!b)return;e.preventDefault();e.stopPropagation();const m=mems.find(x=>x.personId===b.dataset.sync);
+        E['h_'+m.personId].value=String(Math.round(dailySum(p,m.personId,+E.y.value,+E.m.value)*100)/100).replace('.',',');recalc();});
+      const recalc=()=>{let t=0;mems.forEach(m=>{dailyNote(m);const v=parseNum(E['h_'+m.personId].value);t+=v;md.querySelector(`[data-d="${m.personId}"]`).textContent=v?num1(v/memberHPD(p,m))+' d':'';});md.querySelector('#fl-tot').textContent=fmtNum(t)+' h';};
       const fill=()=>{const yy=+E.y.value,mm=+E.m.value;let any=false;mems.forEach(m=>{const l=p.logs.find(l=>l.personId===m.personId&&l.year===yy&&l.month===mm),ds=dailySum(p,m.personId,yy,mm);
           E['h_'+m.personId].value=l?String(l.hours).replace('.',','):(ds?String(Math.round(ds*100)/100).replace('.',','):'');if(l||ds)any=true;
-          md.querySelector(`[data-dl="${m.personId}"]`).textContent=ds?`denní zápisy: ${fmtNum(ds)} h${l&&!l.auto&&Math.abs(l.hours-ds)>0.01?' (měsíční zápis se liší)':l&&l.auto?' (převzato)':' (předvyplněno)'}`:'';});
+          });
         const pe=progressEntry(p,yy,mm);E.pct.value=pe?pe.pct:'';const pi=progressInfo(p);md.querySelector('#fl-prog').textContent=pi.cur!=null?`Hotovo teď podle výpočtu: ${pct(Math.min(1,pi.cur))}. Pokud % nevyplníte, vychází se z posledního zadaného a dopočítá se.`:'Hotovo % je nepovinné. Bez něj se průběh počítá z odhadu MD nebo rozpočtu.';
         md.querySelector('#fl-hint').textContent=any?`${cap1(MONTHS[mm-1])} ${yy} už má zápis. Úpravou ho přepíšete, prázdné pole záznam smaže.`:`Nový zápis za ${MONTHS[mm-1]} ${yy}.`;md.querySelector('#fl-del').hidden=!any;recalc();};
       E.m.addEventListener('change',fill);E.y.addEventListener('change',fill);f.addEventListener('input',e=>{if((e.target.name||'').startsWith('h_'))recalc();});
