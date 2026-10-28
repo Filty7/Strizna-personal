@@ -117,6 +117,7 @@ textarea.inp{resize:vertical;line-height:1.45}
 .pm-row b{color:var(--fg);font-weight:600}
 .pm-r{display:inline-flex;gap:12px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto}
 .pm-row b.t-bad,.t-bad{color:var(--bad)} .pm-row b.t-warn,.t-warn{color:var(--warn)}
+.miss{color:var(--warn);font-size:11px;font-weight:700}
 .wip{color:var(--info);font-style:italic;opacity:.85}
 .dlist-h{display:flex;justify-content:space-between;gap:10px;padding-top:10px;border-top:1px solid var(--line)}
 .dlist{list-style:none;margin:0;padding:0;display:grid;max-height:240px;overflow:auto}
@@ -574,7 +575,7 @@ const tagColor=id=>(TAGS.find(t=>t.id===id)||TAGS[2]).color;
 
 /* ---------- state ---------- */
 /* Edice aplikace: build.py sem vloží konfiguraci (template / personal). */
-const APP={"edition":"cloud","key":"strizna.cloud","data":{"settings":{"hoursPerDay":8,"capacity":20},"people":[],"projects":[],"demo":false},"cloud":{"url":"https://jjjbskjgrepbqorapfxn.supabase.co","key":"sb_publishable_Ae-I7GvkqHFgplz8sceZ7Q_kOUajYy_"},"tagline":"osobní"};
+const APP={"edition":"cloud","key":"strizna.cloud","data":{"settings":{"hoursPerDay":8,"capacity":20},"people":[],"projects":[],"demo":false},"cloud":{"url":"https://jjjbskjgrepbqorapfxn.supabase.co","key":"sb_publishable_Ae-I7GvkqHFgplz8sceZ7Q_kOUajYy_"},"patches":[{"id":"2026-10-28-zerofill","type":"zerofill","until":"2026-09","label":"nuly do prázdných měsíců"}],"tagline":"osobní"};
 const KEY=APP.key, UIKEY=APP.key+'.ui';
 let state;
 let ui={view:'projects',id:null,q:'',sort:'created-desc',dsort:'name',unit:'h',msort:{k:'hours',dir:-1},hsort:{k:'from',dir:-1},scope:'active'};
@@ -587,8 +588,18 @@ function load(){try{const s=localStorage.getItem(KEY);if(s){const d=JSON.parse(s
 /* Balíčky dat (jen osobní edice): přimíchají se jednou k uloženým datům. Nic nepřepisují,
    jen doplní lidi (shoda podle e-mailu nebo jména) a projekty (shoda podle názvu a data založení). */
 let patchMsg='';
+/* Chybějící měsíční zápisy: u aktivního projektu musí mít každý člověk, který byl na projektu,
+   za každý uplynulý měsíc zápis (i 0). Prázdné = nevyplněno. */
+const memberInMonth=(m,k)=>ymOf(m.addedAt)<=k&&(!m.removedAt||ymOf(m.removedAt)>=k);
+const hasLog=(p,pid,k)=>p.logs.some(l=>l.personId===pid&&l.year===ymY(k)&&l.month===ymM(k));
+function missingMonths(p,uptoK){if(p.status!=='active')return[];const out=[],end=uptoK!=null?uptoK:ymNow()-1;
+  for(let k=ymOf(p.created);k<=end;k++){const pids=p.members.filter(m=>memberInMonth(m,k)&&!hasLog(p,m.personId,k)).map(m=>m.personId);if(pids.length)out.push({k,pids});}
+  return out;}
 function applyPatches(){const done=state.appliedPatches||(state.appliedPatches=[]);const added=[];
   (APP.patches||[]).forEach(pt=>{if(done.includes(pt.id))return;const idMap={};
+    if(pt.type==='zerofill'){const until=ymOf(pt.until+'-01');let n=0;
+      state.projects.forEach(p=>missingMonths(p,until).forEach(({k,pids})=>pids.forEach(pid=>{p.logs.push({id:uid(),personId:pid,year:ymY(k),month:ymM(k),hours:0});n++;})));
+      done.push(pt.id);if(n)added.push(`nuly do ${n} prázdných měsíců`);return;}
     (pt.people||[]).forEach(np=>{const ex=state.people.find(x=>(np.email&&norm(x.email)===norm(np.email))||norm(x.first+' '+x.last)===norm(np.first+' '+np.last));
       if(ex)idMap[np.id]=ex.id;else{const id='u'+uid();idMap[np.id]=id;state.people.push({...np,id,notes:np.notes||[]});}});
     (pt.projects||[]).forEach(nj=>{if(state.projects.some(x=>norm(x.name)===norm(nj.name)&&x.created===nj.created))return;const mp=o=>({...o,personId:idMap[o.personId]||o.personId});
@@ -956,7 +967,7 @@ function viewProjects(){
   const owed=act.reduce((a,p)=>a+projOwed(p),0);
   const dl=act.filter(p=>p.deadline).map(p=>({p,d:daysBetween(todayISO(),p.deadline)})).sort((a,b)=>a.d-b.d)[0];
   const dm=defaultLogMonth(),pf=portfolio(ui.scope);
-  const missing=act.filter(p=>activeMembers(p).length&&ym(dm.y,dm.m)>=ymOf(p.created)&&!p.logs.some(l=>l.year===dm.y&&l.month===dm.m));
+  const missing=act.map(p=>({p,mm:missingMonths(p)})).filter(x=>x.mm.length);
   const d=new Date();
   let extra='';
   if(q){
@@ -978,7 +989,7 @@ function viewProjects(){
     <div><dt>Člověk za měsíc</dt><dd class="lc ${loadCls(pf.wd/(pf.pm||1)/CAPD())}">${num1(pf.wd/(pf.pm||1))} d <small>Ø, ${pct(pf.wd/(pf.pm||1)/CAPD())} z kapacity ${CAPD()} d</small></dd></div>
 </dl>
   <p class="infoline"><span>Lidé v práci<b>${ppl.size}</b></span><span>Zapsáno za ${MONTHS[ymM(pk)-1]}<b>${fw(lastH,lastD)}</b></span><span>Nejbližší deadline<b>${dl?`${esc(dl.p.name)}, ${dl.d<0?'po termínu':'za '+dl.d+' '+plural(dl.d,'den','dny','dní')}`:'—'}</b></span></p>
-  ${missing.length?`<div class="remind"><span>Hodiny za <b>${MONTHS[dm.m-1]} ${dm.y}</b> zatím chybí u:</span>${missing.map(p=>`<button data-act="log-hours" data-pid="${p.id}" data-y="${dm.y}" data-m="${dm.m}"><i class="dot" style="--c:${tagColor(p.tag)}"></i>${esc(p.name)}</button>`).join('')}</div>`:''}`}
+  ${missing.length?`<div class="remind"><span>Chybí zápis hodin:</span>${missing.map(({p,mm})=>{const f=mm[0].k;return `<button data-act="log-hours" data-pid="${p.id}" data-y="${ymY(f)}" data-m="${ymM(f)}" title="${esc(mm.map(x=>cap1(MONTHS[ymM(x.k)-1])+' '+ymY(x.k)+': '+x.pids.map(id=>(getPer(id)||{}).first||'?').join(', ')).join('\n'))}"><i class="dot" style="--c:${tagColor(p.tag)}"></i>${esc(p.name)} · ${mm.length===1?MONTHS[ymM(f)-1]:mm.length+' '+plural(mm.length,'měsíc','měsíce','měsíců')}</button>`;}).join('')}<span class="hint">Nepracoval-li někdo, zapište 0.</span></div>`:''}`}
   ${list.length?`<div class="pgrid">${list.map(projectCard).join('')}</div>`:(q?(extra?'':emptyBox('Nic nenalezeno','Zkuste jiné jméno, firmu nebo pozici.')):emptyBox('Žádný aktivní projekt','Založte první tlačítkem + Projekt.'))}
   ${q&&!list.length&&extra?'<p class="faint">Mezi aktivními projekty nic.</p>':''}
   ${extra}
@@ -1119,8 +1130,9 @@ function viewProject(id){
   const months=projectMonths(p).slice().reverse();
   const matrix=`<div class="tscroll"><table class="tbl"><thead><tr><th>Měsíc</th>${p.members.map(m=>{const per=getPer(m.personId);return `<th class="num"><i class="dot" style="--c:${cols[m.personId]}"></i> ${esc(per?per.first:'?')}</th>`;}).join('')}<th class="num">Celkem</th><th></th></tr></thead><tbody>
     ${months.map(mo=>{let th=0,td=0;const cells=p.members.map(m=>{const h=logH(p,m.personId,mo.y,mo.m),d=h/memberHPD(p,m);th+=h;td+=d;const ds=!h&&mo.k>=ymNow()?dailySum(p,m.personId,mo.y,mo.m):0;
-        return `<td class="num">${h?fw(h,d):ds?`<span class="wip" title="Rozpracováno z denních zápisů, do statistik se započítá po skončení měsíce">${fw(ds,ds/memberHPD(p,m))}</span>`:'<span class="faint">·</span>'}</td>`;}).join('');
-      const empty=th===0;return `<tr class="${empty?'empty-row':''}"><th scope="row">${cap1(MONTHS[mo.m-1])} ${mo.y}</th>${cells}<td class="num"><b>${empty?'—':fw(th,td)}</b></td><td class="act"><button class="btn sm ghost" data-act="log-hours" data-pid="${p.id}" data-y="${mo.y}" data-m="${mo.m}">${empty?'Zapsat':'Upravit'}</button></td></tr>`;}).join('')}
+        const lg=hasLog(p,m.personId,mo.k),due=p.status==='active'&&mo.k<ymNow()&&memberInMonth(m,mo.k);
+        return `<td class="num">${h?fw(h,d):lg?'<span class="faint">0</span>':ds?`<span class="wip" title="Rozpracováno z denních zápisů, do statistik se započítá po skončení měsíce">${fw(ds,ds/memberHPD(p,m))}</span>`:(due?'<span class="miss" title="Chybí zápis – zapište hodiny nebo 0">chybí</span>':'<span class="faint">·</span>')}</td>`;}).join('');
+      const empty=!p.members.some(m=>hasLog(p,m.personId,mo.k));return `<tr class="${empty?'empty-row':''}"><th scope="row">${cap1(MONTHS[mo.m-1])} ${mo.y}</th>${cells}<td class="num"><b>${empty?'—':fw(th,td)}</b></td><td class="act"><button class="btn sm ghost" data-act="log-hours" data-pid="${p.id}" data-y="${mo.y}" data-m="${mo.m}">${empty?'Zapsat':'Upravit'}</button></td></tr>`;}).join('')}
     </tbody><tfoot><tr><td>Celkem</td>${p.members.map(m=>{const h=memberHours(p,m.personId);return `<td class="num">${fw(h,h/memberHPD(p,m))}</td>`;}).join('')}<td class="num">${fw(w.h,w.d)}</td><td></td></tr></tfoot></table></div>`;
   const share=`<div class="share-bar">${mems.filter(m=>memberHours(p,m.personId)>0).map(m=>`<i style="flex:${memberHours(p,m.personId)};background:${cols[m.personId]}"></i>`).join('')}</div>
     <ul class="share-list">${mems.map(m=>{const h=memberHours(p,m.personId);return `<li><i class="dot" style="--c:${cols[m.personId]}"></i><span>${esc(fullName(getPer(m.personId)))}</span><b class="mono">${pct(w.h?h/w.h:0)}</b><span>${fw(h,h/memberHPD(p,m))}</span></li>`;}).join('')}</ul>`;
@@ -1300,7 +1312,7 @@ function openLog(pid,y,mo){
     <div class="frow" style="align-items:flex-end"><label class="fld grow"><span>Měsíc</span>${monthSelect('m',cur.m)}</label><label class="fld w-sm"><span>Rok</span><input class="inp" type="text" inputmode="decimal" name="y" id="f-y" value="${cur.y}" min="2000" max="2100"></label><label class="fld w-sm"><span>Hotovo % <i>nep.</i></span><input class="inp" inputmode="decimal" name="pct" id="f-pct" placeholder="—" autocomplete="off"></label></div>
     <p class="hint" id="fl-prog"></p>
     <p class="hint" id="fl-hint"></p>
-    <div class="logrows">${mems.map(m=>{const per=getPer(m.personId);return `<label class="logrow ${m.removedAt?'is-removed':''}">${avatar(per)}<span class="lr-name"><b>${esc(fullName(per))}</b><small class="lr-daily" data-dl="${m.personId}"></small><small>${esc(per?per.position:'')}${m.removedAt?' · odebrán':''}${memberHPD(p,m)!==8?` · 1 d = ${memberHPD(p,m)} h`:''}</small></span><span class="lr-in"><input class="inp" inputmode="decimal" name="h_${m.personId}" id="h_${m.personId}" placeholder="0" autocomplete="off"><em>h</em></span><span class="lr-d mono" data-d="${m.personId}"></span></label>`;}).join('')}</div>
+    <div class="logrows">${mems.map(m=>{const per=getPer(m.personId);return `<label class="logrow ${m.removedAt?'is-removed':''}">${avatar(per)}<span class="lr-name"><b>${esc(fullName(per))}</b><small class="lr-daily" data-dl="${m.personId}"></small><small>${esc(per?per.position:'')}${m.removedAt?' · odebrán':''}${memberHPD(p,m)!==8?` · 1 d = ${memberHPD(p,m)} h`:''}</small></span><span class="lr-in"><input class="inp" inputmode="decimal" name="h_${m.personId}" id="h_${m.personId}" placeholder="—" autocomplete="off"><em>h</em></span><span class="lr-d mono" data-d="${m.personId}"></span></label>`;}).join('')}</div>
     <div class="logtotal"><span>Celkem za měsíc</span><b class="mono" id="fl-tot">0 h</b></div>
     ${footer('Uložit',`<button type="button" class="btn danger" id="fl-del" hidden>Smazat celý měsíc</button>`)}</form>`,{noFocus:true,onMount(md){
       const f=md.querySelector('#fl'),E=f.elements;
@@ -1314,9 +1326,9 @@ function openLog(pid,y,mo){
       const del=md.querySelector('#fl-del');
       del.addEventListener('click',()=>{if(!armed(del,'Opravdu smazat měsíc?'))return;const yy=+E.y.value,mm=+E.m.value;p.logs=p.logs.filter(l=>!(l.year===yy&&l.month===mm));p.daily=dailyOf(p).filter(e=>!(+e.date.slice(0,4)===yy&&+e.date.slice(5,7)===mm));p.progress=(p.progress||[]).filter(e=>!(e.year===yy&&e.month===mm));closeModal();commit(`Smazáno: ${MONTHS[mm-1]} ${yy}`);});
       f.addEventListener('submit',e=>{e.preventDefault();const yy=+E.y.value,mm=+E.m.value;if(!yy){return;}
-        mems.forEach(m=>{const v=parseNum(E['h_'+m.personId].value);const i=p.logs.findIndex(l=>l.personId===m.personId&&l.year===yy&&l.month===mm);
+        mems.forEach(m=>{const raw=String(E['h_'+m.personId].value).trim(),v=parseNum(raw);const i=p.logs.findIndex(l=>l.personId===m.personId&&l.year===yy&&l.month===mm);
           const hasDaily=dailySum(p,m.personId,yy,mm)>0;
-          if(v>0||hasDaily){if(i>=0){p.logs[i].hours=v;delete p.logs[i].auto;}else p.logs.push({id:uid(),personId:m.personId,year:yy,month:mm,hours:v});}else if(i>=0)p.logs.splice(i,1);});
+          if(raw!==''||hasDaily){if(i>=0){p.logs[i].hours=v;delete p.logs[i].auto;}else p.logs.push({id:uid(),personId:m.personId,year:yy,month:mm,hours:v});}else if(i>=0)p.logs.splice(i,1);});
         p.progress=(p.progress||[]).filter(e=>!(e.year===yy&&e.month===mm));const pv=String(E.pct.value).trim();if(pv!==''){p.progress.push({year:yy,month:mm,pct:Math.max(0,Math.min(100,Math.round(parseNum(pv))))});}
         closeModal();commit(`Zapsáno: ${MONTHS[mm-1]} ${yy}`);});
       fill();const first=md.querySelector('.lr-in input');if(first)setTimeout(()=>first.focus(),30);
@@ -1569,7 +1581,7 @@ async function cloudEnter(user){
   const r=await cloudFetch();if(r===false)return authView('error','Data se nepodařilo načíst. Zkontrolujte připojení.');
   if(r){state=r.data;cloudVer=r.version;}else{state=initialData();cloudVer=0;}
   if(!valid(state))state=initialData();
-  authHide();rollupDaily();render();syncState('Uloženo','ok');
+  authHide();applyPatches();rollupDaily();render();syncState('Uloženo','ok');if(patchMsg){toast(patchMsg);patchMsg='';}
   if(!r)setTimeout(()=>{toast('Databáze je zatím prázdná. Nahrajte zálohu: Data → Obnovit ze zálohy.');openData();},400);
 }
 async function cloudBoot(){
