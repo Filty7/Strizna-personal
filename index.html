@@ -592,7 +592,7 @@ let patchMsg='';
    za každý uplynulý měsíc zápis (i 0). Prázdné = nevyplněno. */
 const memberInMonth=(m,k)=>ymOf(m.addedAt)<=k&&(!m.removedAt||ymOf(m.removedAt)>=k);
 const hasLog=(p,pid,k)=>p.logs.some(l=>l.personId===pid&&l.year===ymY(k)&&l.month===ymM(k));
-function missingMonths(p,uptoK){if(p.status!=='active')return[];const out=[],end=uptoK!=null?uptoK:ymNow()-1;
+function missingMonths(p,uptoK){if(p.status!=='active')return[];const out=[],dm=defaultLogMonth(),end=uptoK!=null?uptoK:ym(dm.y,dm.m);
   for(let k=ymOf(p.created);k<=end;k++){const pids=p.members.filter(m=>memberInMonth(m,k)&&!hasLog(p,m.personId,k)).map(m=>m.personId);if(pids.length)out.push({k,pids});}
   return out;}
 function applyPatches(){const done=state.appliedPatches||(state.appliedPatches=[]);const added=[];
@@ -1130,7 +1130,7 @@ function viewProject(id){
   const months=projectMonths(p).slice().reverse();
   const matrix=`<div class="tscroll"><table class="tbl"><thead><tr><th>Měsíc</th>${p.members.map(m=>{const per=getPer(m.personId);return `<th class="num"><i class="dot" style="--c:${cols[m.personId]}"></i> ${esc(per?per.first:'?')}</th>`;}).join('')}<th class="num">Celkem</th><th></th></tr></thead><tbody>
     ${months.map(mo=>{let th=0,td=0;const cells=p.members.map(m=>{const h=logH(p,m.personId,mo.y,mo.m),d=h/memberHPD(p,m);th+=h;td+=d;const ds=!h&&mo.k>=ymNow()?dailySum(p,m.personId,mo.y,mo.m):0;
-        const lg=hasLog(p,m.personId,mo.k),due=p.status==='active'&&mo.k<ymNow()&&memberInMonth(m,mo.k);
+        const lg=hasLog(p,m.personId,mo.k),due=p.status==='active'&&mo.k<=ym(defaultLogMonth().y,defaultLogMonth().m)&&memberInMonth(m,mo.k);
         return `<td class="num">${h?fw(h,d):lg?'<span class="faint">0</span>':ds?`<span class="wip" title="Rozpracováno z denních zápisů, do statistik se započítá po skončení měsíce">${fw(ds,ds/memberHPD(p,m))}</span>`:(due?'<span class="miss" title="Chybí zápis – zapište hodiny nebo 0">chybí</span>':'<span class="faint">·</span>')}</td>`;}).join('');
       const empty=!p.members.some(m=>hasLog(p,m.personId,mo.k));return `<tr class="${empty?'empty-row':''}"><th scope="row">${cap1(MONTHS[mo.m-1])} ${mo.y}</th>${cells}<td class="num"><b>${empty?'—':fw(th,td)}</b></td><td class="act"><button class="btn sm ghost" data-act="log-hours" data-pid="${p.id}" data-y="${mo.y}" data-m="${mo.m}">${empty?'Zapsat':'Upravit'}</button></td></tr>`;}).join('')}
     </tbody><tfoot><tr><td>Celkem</td>${p.members.map(m=>{const h=memberHours(p,m.personId);return `<td class="num">${fw(h,h/memberHPD(p,m))}</td>`;}).join('')}<td class="num">${fw(w.h,w.d)}</td><td></td></tr></tfoot></table></div>`;
