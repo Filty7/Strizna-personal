@@ -1427,9 +1427,9 @@ function openWorkDay(iso){
   const e=WK().find(x=>x.date===iso);
   modal(e?'Upravit den':'Zapsat den',`<form id="fw" class="form">
     <div class="frow" style="align-items:flex-end"><label class="fld w-date"><span>Den</span><input class="inp" type="date" name="date" id="fw-date" value="${iso}" required></label><span class="hint" id="fw-wd" style="padding-bottom:10px"></span></div>
-    <div class="frow"><label class="fld grow"><span>Příchod</span><input class="inp" type="time" name="in" id="fw-in" value="${e?toTimeInput(e.in):''}"></label>
-    <label class="fld grow"><span>Odchod <i>po půlnoci = další den</i></span><input class="inp" type="time" name="out" id="fw-out" value="${e?toTimeInput(e.out):''}"></label>
-    <label class="fld w-sm"><span>Pauza <i>h:mm</i></span><input class="inp" name="off" id="fw-off" inputmode="decimal" placeholder="0:00" value="${e&&e.off?hmDur(e.off).replace('−','-'):''}" autocomplete="off"></label></div>
+    <div class="frow"><label class="fld grow"><span>Příchod</span><input class="inp hm" type="text" inputmode="numeric" placeholder="hh:mm" maxlength="5" autocomplete="off" name="in" id="fw-in" value="${e?toTimeInput(e.in):''}"></label>
+    <label class="fld grow"><span>Odchod <i>po půlnoci = další den</i></span><input class="inp hm" type="text" inputmode="numeric" placeholder="hh:mm" maxlength="5" autocomplete="off" name="out" id="fw-out" value="${e?toTimeInput(e.out):''}"></label>
+    <label class="fld w-sm"><span>Pauza <i>h:mm</i></span><input class="inp hm" data-neg="1" maxlength="6" name="off" id="fw-off" inputmode="numeric" placeholder="0:00" value="${e&&e.off?hmDur(e.off).replace('−','-'):''}" autocomplete="off"></label></div>
     <label class="fld"><span>Poznámka <i>nepovinné</i></span><input class="inp" name="note" id="fw-note" value="${esc(e&&e.note||'')}" autocomplete="off"></label>
     <div class="fld"><span>Typ dne</span><div class="seg wk-type" role="radiogroup">${[['','Práce'],['dovolena','Dovolená'],['neplaceno','Neplacené volno (0 h)']].map(([v,l])=>`<label><input type="radio" name="type" value="${v}" ${((e&&e.type)||'')===v?'checked':''}><span>${l}</span></label>`).join('')}</div>
       <p class="hint" id="fw-thint"></p></div>
@@ -1492,10 +1492,13 @@ function modal(title,body,opt){
   root.hidden=false;document.body.style.overflow='hidden';
   const m=root.querySelector('.modal');
   m.querySelectorAll('form').forEach(f=>{f.noValidate=true;f.addEventListener('submit',e=>{f.querySelectorAll('.invalid').forEach(i=>i.classList.remove('invalid'));const bad=[...f.querySelectorAll('[required]')].filter(i=>!String(i.value).trim());if(bad.length){e.preventDefault();e.stopImmediatePropagation();bad.forEach(i=>i.classList.add('invalid'));bad[0].focus();toast('Vyplňte zvýrazněná pole');}});});
+  m.querySelectorAll('input.hm').forEach(hmMask);
   if(opt.onMount)opt.onMount(m);
   const f=m.querySelector('[autofocus]')||m.querySelector('input:not([type=hidden]):not([type=radio]):not([type=checkbox]),textarea,select');if(f&&!opt.noFocus)setTimeout(()=>f.focus(),30);
 }
 let onCloseFn=null;
+function hmFmt(v,neg){v=String(v||'');if(/[.,]/.test(v))return v;const n=neg&&/^\s*[-−]/.test(v)?'-':'';const d=v.replace(/\D/g,'').slice(0,4);return n+(d.length>=3?d.slice(0,-2)+':'+d.slice(-2):d);}
+function hmMask(i){i.addEventListener('input',ev=>{if(ev.inputType&&ev.inputType.startsWith('delete'))return;const v=hmFmt(i.value,i.dataset.neg);if(v!==i.value){i.value=v;i.setSelectionRange(v.length,v.length);}});i.addEventListener('blur',()=>{const v=hmFmt(i.value,i.dataset.neg);if(v!==i.value){i.value=v;i.dispatchEvent(new Event('input',{bubbles:true}));}});}
 function closeModal(){const r=$('#modal-root');r.hidden=true;r.innerHTML='';document.body.style.overflow='';const f=onCloseFn;onCloseFn=null;if(f)f();}
 const footer=(primary,left)=>`<footer class="m-foot">${left||''}<span class="spacer"></span><button type="button" class="btn ghost" data-act="close-modal">Zrušit</button><button class="btn primary">${primary}</button></footer>`;
 function monthSelect(name,cur){return `<select class="inp" name="${name}" id="f-${name}">${MONTHS.map((n,i)=>`<option value="${i+1}" ${i+1===cur?'selected':''}>${cap1(n)}</option>`).join('')}</select>`;}
@@ -1795,11 +1798,11 @@ const ACTS={
   msort:t=>{const k=t.dataset.k,st=t.dataset.s||'msort',S=ui[st];ui[st]=S.k===k?{k,dir:-S.dir}:{k,dir:k==='name'?1:-1};savePrefs();render();},
   data:()=>openData(),
   'close-modal':()=>closeModal(),
-  scrim:(t,e)=>{if(e.target===t)closeModal();}
+  scrim:()=>{}
 };
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||t.disabled)return;const f=ACTS[t.dataset.act];if(f){if(t.tagName==='BUTTON'&&t.closest('form')&&t.type!=='submit')e.preventDefault();f(t,e);}});
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'&&!$('#modal-root').hidden){closeModal();return;}
+  if(e.key==='Escape'&&!$('#modal-root').hidden){return;}
   if(e.key==='/'&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)&&$('#modal-root').hidden){e.preventDefault();$('#q').focus();return;}
   if((e.key==='Enter'||e.key===' ')&&e.target.matches('article[data-act]')){e.preventDefault();e.target.click();}
 });
