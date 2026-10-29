@@ -186,12 +186,14 @@ textarea.inp{resize:vertical;line-height:1.45}
 .chart .yl.in{stroke:#8fd1c4} .chart .yl.out{stroke:#f19a90} .chart .yl.ex{stroke:#c9b6f2;stroke-dasharray:2 3}
 .chart .yl.prev{opacity:.4;stroke-dasharray:5 4;stroke-width:1.3}
 .chart .ydot{stroke:none} .chart .ydot.in{fill:#8fd1c4} .chart .ydot.out{fill:#f19a90} .chart .ydot.ex{fill:#c9b6f2}
+.chart .yl.vac{stroke:#7cc29a} .chart .ydot.vac{fill:#7cc29a} .chart .tv.vacd{fill:#7cc29a;font-weight:600}
+.chart .tv.in,.chart .tv.out,.chart .tv.ex,.chart .tv.vacd,.chart .tv.exp{paint-order:stroke;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round} .chart .tv.exp{fill:#c9b6f2;opacity:.55}
 .chart .tv.in{fill:#8fd1c4} .chart .tv.out{fill:#f19a90} .chart .tv.ex{fill:#c9b6f2}
 .chart .vacb rect{fill:#7cc29a}
 .chart .tv.in-bar{fill:#3a2c0c;font-weight:600} .chart .tv.in-bar.prev{fill:var(--bg)} .chart .vacb text{fill:#0d1a14;font-family:var(--mono);font-size:9.5px;font-weight:600}
 .ln-lg{display:inline-flex;align-items:center;gap:6px}
 .ln-lg::before{content:"";width:16px;border-top:2px solid currentColor}
-.ln-lg.in{color:#8fd1c4} .ln-lg.out{color:#f19a90} .ln-lg.ex{color:#c9b6f2} .ln-lg.ex::before{border-top-style:dotted}
+.ln-lg.vac{color:#7cc29a} .ln-lg.in{color:#8fd1c4} .ln-lg.out{color:#f19a90} .ln-lg.ex{color:#c9b6f2} .ln-lg.ex::before{border-top-style:dotted}
 .chart .ax.we{fill:var(--muted)}
 .mnav.big{font-size:16px;gap:10px}
 .mnav.big b{min-width:150px;text-align:center}
@@ -1362,26 +1364,31 @@ function workYearChart(y,cmp){
   const yS=wStats(WK().filter(e=>+e.date.slice(0,4)===y)),pS=wStats(WK().filter(e=>+e.date.slice(0,4)===y-1));
   const all=[...cur,...prev],mx=Math.max(20,...all.map(s=>s.avgOut||0),...all.map(s=>s.avg||0)),top=Math.ceil(mx/2)*2;
   const mn=Math.min(0,...all.map(s=>s.ex==null?0:s.ex)),bot=mn<-1.5?Math.floor(mn/2)*2-2:-2;
-  const L=36,R=10,T=14,B=46,W=760,H=360,ph=H-T-B,pw=W-L-R,slot=pw/12,bw=slot*0.32,Y=v=>T+ph-((v-bot)/(top-bot))*ph;
+  const L=36,R=10,T=14,B=28,W=760,H=360,ph=H-T-B,pw=W-L-R,slot=pw/12,bw=slot*0.32,Y=v=>T+ph-((v-bot)/(top-bot))*ph;
   let g='';for(let v=bot;v<=top;v+=2)g+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" class="gl${v===0?' base':''}${v===8?' key':''}"/><text x="${L-6}" y="${Y(v)+4}" class="ax${v===8?' key':''}" text-anchor="end">${v}</text>`;
   let bars='',lab='',bl='';const cx=i=>L+slot*(i+0.5);
   ks.forEach((k,i)=>{const x=cx(i),a=cur[i].avg,xc=cmp?x+1:x-bw/2;
     if(cmp){const p=prev[i].avg;if(p!=null){bars+=`<rect x="${(x-bw-1).toFixed(1)}" y="${Y(p).toFixed(1)}" width="${bw.toFixed(1)}" height="${(Y(0)-Y(p)).toFixed(1)}" rx="3" class="wk-bar prev"><title>${cap1(MONTHS[i])} ${y-1}: Ø ${fmtNum(p)} h/den</title></rect>`;bl+=`<text x="${(x-bw/2-1).toFixed(1)}" y="${(Y(p)+13).toFixed(1)}" class="tv sm in-bar prev" text-anchor="middle">${fmtNum(p)}</text>`;}}
     if(a!=null){bars+=`<rect x="${xc.toFixed(1)}" y="${Y(a).toFixed(1)}" width="${bw.toFixed(1)}" height="${(Y(0)-Y(a)).toFixed(1)}" rx="3" class="wk-bar work" data-act="work-month" data-k="${k}"><title>${cap1(MONTHS[i])} ${y}: Ø ${fmtNum(a)} h/den · ${cur[i].days} dní · celkem ${fmtNum(cur[i].sum)} h</title></rect>`;bl+=`<text x="${(xc+bw/2).toFixed(1)}" y="${(Y(a)+13).toFixed(1)}" class="tv sm in-bar" text-anchor="middle">${fmtNum(a)}</text>`;}
     lab+=`<text x="${x.toFixed(1)}" y="${H-B+16}" class="ax" text-anchor="middle">${MONTHS_S[i]}</text>`;
-    const v=cur[i].vac;if(v)lab+=`<g class="vacb"><rect x="${(x-13).toFixed(1)}" y="${H-B+23}" width="26" height="15" rx="7.5"/><text x="${x.toFixed(1)}" y="${H-B+34}" text-anchor="middle">${v} d</text><title>${cap1(MONTHS[i])} ${y}: dovolená ${v} ${plural(v,'den','dny','dní')}</title></g>`;});
+  });
   const path=(arr,f)=>{let d='',pen=false;arr.forEach((s,i)=>{const v=f(s);if(v==null){pen=false;return;}d+=`${pen?'L':'M'}${cx(i).toFixed(1)} ${Y(v).toFixed(1)}`;pen=true;});return d;};
   const dots=(arr,f,cls,lb,dy,ttl,fy)=>arr.map((s,i)=>{const v=f(s);if(v==null)return'';return `<circle cx="${cx(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="2.6" class="ydot ${cls}"><title>${ttl(s,i)}</title></circle>${lb?`<text x="${cx(i).toFixed(1)}" y="${(fy!=null?fy:Y(v)+dy).toFixed(1)}" class="tv sm ${cls}" text-anchor="middle">${lb(v)}</text>`:''}`;}).join('');
+  cur.forEach((s,i)=>s.vd=cl[i].length?s.vac:null);prev.forEach((s,i)=>s.vd=pl[i].length?s.vac:null);
   const sg=v=>{const r=Math.round(v*10)/10;return (r>0?'+':r<0?'−':'')+fmtNum(Math.abs(r));};
   let lines='';
   if(yS.avg!=null)lines+=`<line x1="${L}" x2="${W-R}" y1="${Y(yS.avg).toFixed(1)}" y2="${Y(yS.avg).toFixed(1)}" class="avgl yr"/>`;
   if(cmp&&pS.avg!=null)lines+=`<line x1="${L}" x2="${W-R}" y1="${Y(pS.avg).toFixed(1)}" y2="${Y(pS.avg).toFixed(1)}" class="avgl yrp"/>`;
-  if(cmp){lines+=`<path d="${path(prev,s=>s.avgIn)}" class="yl in prev"/><path d="${path(prev,s=>s.avgOut)}" class="yl out prev"/>`;}
-  lines+=`<path d="${path(cur,s=>s.avgIn)}" class="yl in"/><path d="${path(cur,s=>s.avgOut)}" class="yl out"/><path d="${path(cur,s=>s.ex)}" class="yl ex"/>`;
+  if(cmp){lines+=`<path d="${path(prev,s=>s.avgIn)}" class="yl in prev"/><path d="${path(prev,s=>s.avgOut)}" class="yl out prev"/><path d="${path(prev,s=>s.ex)}" class="yl ex prev"/><path d="${path(prev,s=>s.vd)}" class="yl vac prev"/>`;
+    lines+=prev.map((s,i)=>s.ex==null?'':`<circle cx="${cx(i).toFixed(1)}" cy="${Y(s.ex).toFixed(1)}" r="2" class="ydot ex prev"><title>${cap1(MONTHS[i])} ${y-1}: navíc ${sg(s.ex)} h na pracovní den</title></circle>`).join('');
+    lines+=prev.map((s,i)=>!s.vd?'':`<circle cx="${cx(i).toFixed(1)}" cy="${Y(s.vd).toFixed(1)}" r="2" class="ydot vac prev"><title>${cap1(MONTHS[i])} ${y-1}: dovolená ${s.vd} ${plural(s.vd,'den','dny','dní')}</title></circle>`).join('');}
+  lines+=`<path d="${path(cur,s=>s.avgIn)}" class="yl in"/><path d="${path(cur,s=>s.avgOut)}" class="yl out"/><path d="${path(cur,s=>s.ex)}" class="yl ex"/><path d="${path(cur,s=>s.vd)}" class="yl vac"/>`;
   const mn_=i=>`${cap1(MONTHS[i])} ${y}`;
   lines+=cur.map((s,i)=>dots([s],q=>q.avgIn,'in',v=>hm(v),0,()=>`${mn_(i)}: Ø příchod ${hm(s.avgIn)}`,s.avgIn==null?null:Y(Math.max(s.avgIn,(s.avg||0)+0.4,cmp&&prev[i].avg?prev[i].avg+0.4:0))-7).replace(/(c?x)="[\d.]+"/g,(m,k)=>`${k}="${cx(i).toFixed(1)}"`)).join('');
   lines+=dots(cur,s=>s.avgOut,'out',v=>hm(v),-7,(s,i)=>`${mn_(i)}: Ø odchod ${hm(s.avgOut)}`);
-  lines+=dots(cur,s=>s.ex,'ex',v=>sg(v),-7,(s,i)=>`${mn_(i)}: víkendy ${fmtNum(s.weH)} h − pauzy ${fmtNum(s.weH-s.ex*s.days)} h = ${sg(s.ex)} h na pracovní den`,Y(bot+1)+4);
+  lines+=dots(cur,s=>s.ex,'ex',v=>sg(v),-7,(s,i)=>`${mn_(i)}: víkendy ${fmtNum(s.weH)} h − pauzy ${fmtNum(s.weH-s.ex*s.days)} h = ${sg(s.ex)} h na pracovní den`,Y(bot+1)+(cmp?-1:4));
+  if(cmp)lines+=prev.map((s,i)=>s.ex==null?'':`<text x="${cx(i).toFixed(1)}" y="${(Y(bot+1)+12).toFixed(1)}" class="tv sm exp" text-anchor="middle">${sg(s.ex)}</text>`).join('');
+  lines+=cur.map((s,i)=>s.vd==null?'':`<circle cx="${cx(i).toFixed(1)}" cy="${Y(s.vd).toFixed(1)}" r="${s.vd?3:2}" class="ydot vac"><title>${mn_(i)}: dovolená ${s.vd} ${plural(s.vd,'den','dny','dní')}</title></circle>${s.vd?`<text x="${cx(i).toFixed(1)}" y="${(Y(s.vd)-7).toFixed(1)}" class="tv sm vacd" text-anchor="middle">${s.vd} d</text>`:''}`).join('');
   return{svg:`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Rok po měsících: průměr hodin na den, příchody, odchody, práce navíc a dovolená">${g}${bars}${lines}${bl}${lab}</svg>`,yS,pS};
 }
 function viewWork(){
@@ -1413,7 +1420,7 @@ function viewWork(){
   <section class="card"><div class="card-h"><h2>Rok ${yy} po měsících</h2><div class="view-tools">
     ${hasPrev?`<label class="chk"><input type="checkbox" id="wk-cmp" data-change="work-cmp" ${cmp?'checked':''}> srovnat s ${yy-1}</label>`:''}
     <div class="mnav"><button class="gear" data-act="work-year" data-d="-1" aria-label="Předchozí rok">‹</button><b>${yy}</b><button class="gear" data-act="work-year" data-d="1" aria-label="Další rok">›</button></div></div></div>
-    ${(()=>{const yc=workYearChart(yy,cmp&&hasPrev);return `<div class="legend yr-lg"><span><i class="dot" style="--c:var(--accent)"></i>Ø h/den ${yy}</span><span class="ln-lg in">Ø příchod</span><span class="ln-lg out">Ø odchod</span><span class="ln-lg ex">navíc / den (víkendy − pauzy)</span><span><i class="dot" style="--c:#7cc29a"></i>dovolená (dny)</span><span class="avg-lg yr">Ø ${yy}: ${yc.yS.avg!=null?fmtNum(yc.yS.avg)+' h/den':'—'}</span><span class="${cmp&&hasPrev?'':'invis'}"><i class="dot" style="--c:var(--muted)"></i>${yy-1}</span><span class="avg-lg yrp ${cmp&&hasPrev?'':'invis'}">Ø ${yy-1}: ${yc.pS.avg!=null?fmtNum(yc.pS.avg)+' h/den':'—'}</span></div>${yc.svg}`;})()}</section>`;
+    ${(()=>{const yc=workYearChart(yy,cmp&&hasPrev);return `<div class="legend yr-lg"><span><i class="dot" style="--c:var(--accent)"></i>Ø h/den ${yy}</span><span class="ln-lg in">Ø příchod</span><span class="ln-lg out">Ø odchod</span><span class="ln-lg ex">navíc / den (víkendy − pauzy)</span><span class="ln-lg vac">dovolená (dny)</span><span class="avg-lg yr">Ø ${yy}: ${yc.yS.avg!=null?fmtNum(yc.yS.avg)+' h/den':'—'}</span><span class="${cmp&&hasPrev?'':'invis'}"><i class="dot" style="--c:var(--muted)"></i>${yy-1}</span><span class="avg-lg yrp ${cmp&&hasPrev?'':'invis'}">Ø ${yy-1}: ${yc.pS.avg!=null?fmtNum(yc.pS.avg)+' h/den':'—'}</span></div>${yc.svg}`;})()}</section>`;
 }
 function roundNow(){const d=new Date();return Math.round((d.getHours()+d.getMinutes()/60)*12)/12;}
 function openWorkDay(iso){
