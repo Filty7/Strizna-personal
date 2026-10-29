@@ -1407,7 +1407,7 @@ function openWorkImport(){
     let data=null;const err=m.querySelector('#wi-err'),go=m.querySelector('#wi-go');
     m.querySelector('#wi-file').addEventListener('change',e=>{const fl=e.target.files[0];if(!fl)return;const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);data=Array.isArray(j)?j:(j.entries||j.worklog);if(!Array.isArray(data))throw 0;err.hidden=true;go.disabled=false;go.textContent=`Importovat ${data.length} dní`;}catch(x){err.textContent='Soubor se nepodařilo přečíst.';err.hidden=false;go.disabled=true;}};r.readAsText(fl);});
     go.addEventListener('click',()=>{if(!data)return;const have=new Set(WK().map(e=>e.date));let n=0;
-      data.forEach(e=>{if(!e||!/^\d{4}-\d{2}-\d{2}$/.test(e.date)||have.has(e.date))return;const n={id:uid(),date:e.date,in:e.in??null,out:e.out??null,off:+e.off||0,note:e.note||''};const ty=e.type||(e.volno?'dovolena':'');if(ty)n.type=ty;WK().push(n);have.add(e.date);n++;});
+      data.forEach(e=>{if(!e||!/^\d{4}-\d{2}-\d{2}$/.test(e.date)||have.has(e.date))return;const rec={id:uid(),date:e.date,in:e.in??null,out:e.out??null,off:+e.off||0,note:e.note||''};const ty=e.type||(e.volno?'dovolena':'');if(ty)rec.type=ty;WK().push(rec);have.add(e.date);n++;});
       closeModal();commit(`Importováno ${n} dní`);});
   }});
 }
