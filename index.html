@@ -167,7 +167,7 @@ textarea.inp{resize:vertical;line-height:1.45}
 .wk-we-dot{background:var(--we);border:1px solid var(--line-2)}
 .wk-bar{fill:var(--accent);pointer-events:none}
 .wk-bar.work{fill:var(--accent)} .wk-bar.wip{fill:var(--accent);opacity:.45}
-.wk-bar.wkend{fill:var(--accent);opacity:.22}
+.wk-bar.wkend{fill:#9aa0a8;opacity:.28}
 .wk-bar.vac{fill:var(--vac)} .wk-bar.unpaid{fill:var(--unpaid)}
 .wk-bar.prev{fill:var(--muted);opacity:.45}
 .chart .gl.key{stroke:var(--line-2)} .chart .ax.key{fill:var(--fg);font-weight:600}
@@ -177,6 +177,9 @@ textarea.inp{resize:vertical;line-height:1.45}
 .avg-lg{display:inline-flex;align-items:center;gap:6px}
 .avg-lg::before{content:"";width:16px;border-top:2px dashed currentColor}
 .avg-lg.in{color:#8fd1c4} .avg-lg.out{color:#f19a90}
+.avg-lg.yr{color:var(--accent)} .avg-lg.yrp{color:var(--muted)}
+.chart .avgl.yr{stroke:var(--accent);opacity:.9} .chart .avgl.yrp{stroke:var(--muted);opacity:.8}
+.invis{visibility:hidden}
 .wk-bar[data-act]{pointer-events:auto;cursor:pointer}
 .chart .tv.sm{font-size:9.5px}
 .chart .ax.we{fill:var(--muted)}
@@ -1299,15 +1302,15 @@ function parseTime(s){s=String(s||'').trim();if(!s)return null;let m=s.match(/^(
 function parseDur(s){s=String(s||'').trim();if(!s)return 0;const neg=/^[-−]/.test(s);s=s.replace(/^[-−+]/,'');let v;if(s.includes(':')){const [a,b]=s.split(':');v=(+a||0)+(+b||0)/60;}else v=parseNum(s);return neg?-v:v;}
 const toTimeInput=x=>{if(x==null)return '';let v=Math.round(x*60)%1440;return pad(Math.floor(v/60))+':'+pad(v%60);};
 const wComplete=e=>e.in!=null&&e.out!=null;
-function wTotal(e){if(isVac(e)||isUnpaid(e))return 0;if(e.in!=null&&e.out==null)return null;return (wComplete(e)?e.out-e.in:0)-(+e.off||0);}
-const wWorkday=e=>!isWeekend(e.date)&&(isUnpaid(e)||(!isVac(e)&&wComplete(e)));
+function wTotal(e){if(isUnpaid(e))return 0;if(isVac(e)&&!wComplete(e)&&!(+e.off<0))return 0;if(e.in!=null&&e.out==null)return null;return (wComplete(e)?e.out-e.in:0)-(+e.off||0);}
+const wWorkday=e=>!isWeekend(e.date)&&(isUnpaid(e)||wComplete(e));
 const wTimed=e=>!isWeekend(e.date)&&!e.type&&wComplete(e);
 function wStats(list){
-  const done=list.filter(e=>wTotal(e)!=null),wd=list.filter(wWorkday),tm=list.filter(wTimed),we=done.filter(e=>isWeekend(e.date)&&!e.type);
+  const done=list.filter(e=>wTotal(e)!=null),wd=list.filter(wWorkday),tm=list.filter(wTimed),we=done.filter(e=>isWeekend(e.date)&&!e.type);const vh=done.filter(e=>isVac(e)&&!isWeekend(e.date)).reduce((a,e)=>a+wTotal(e),0);
   const sum=done.reduce((a,e)=>a+wTotal(e),0),weH=we.reduce((a,e)=>a+wTotal(e),0);
   const pick=(arr,f,cmp)=>arr.reduce((b,e)=>b==null||cmp(f(e),f(b))?e:b,null);
   const avg=(arr,f)=>arr.length?arr.reduce((a,e)=>a+f(e),0)/arr.length:null;
-  return{sum,days:wd.length,avg:wd.length?sum/wd.length:null,weH,weDays:we.length,vac:list.filter(e=>isVac(e)&&!isWeekend(e.date)).length,unpaid:list.filter(e=>isUnpaid(e)&&!isWeekend(e.date)).length,
+  return{sum,days:wd.length,avg:wd.length?sum/wd.length:null,weH,vacH:vh,weDays:we.length,vac:list.filter(e=>isVac(e)&&!isWeekend(e.date)).length,unpaid:list.filter(e=>isUnpaid(e)&&!isWeekend(e.date)).length,
     avgIn:avg(tm,e=>e.in),avgOut:avg(tm,e=>e.out),
     firstIn:pick(tm,e=>e.in,(a,b)=>a<b),lastIn:pick(tm,e=>e.in,(a,b)=>a>b),firstOut:pick(tm,e=>e.out,(a,b)=>a<b),lastOut:pick(tm,e=>e.out,(a,b)=>a>b),
     longest:pick(done.filter(e=>!e.type),wTotal,(a,b)=>a>b)};
@@ -1327,7 +1330,8 @@ function workSpanChart(k){
   let bars='',hits='';
   for(let d=1;d<=dim;d++){const iso=`${y}-${pad(m)}-${pad(d)}`,e=by[iso],cx=L+slot*(d-0.5),we=isWeekend(iso),x0=(cx-bw/2).toFixed(1);
     hits+=`<rect x="${(L+slot*(d-1)).toFixed(1)}" y="${T}" width="${slot.toFixed(1)}" height="${ph}" class="wk-hit" data-act="work-day" data-date="${iso}"><title>${d}. ${m}. ${wdOf(iso)}${e?'':' · zapsat'}</title></rect>`;
-    if(e&&isVac(e))bars+=`<rect x="${x0}" y="${T}" width="${bw.toFixed(1)}" height="${ph}" rx="3" class="wk-bar vac"/>`;
+    if(e&&isVac(e)){bars+=`<rect x="${x0}" y="${T}" width="${bw.toFixed(1)}" height="${ph}" rx="3" class="wk-bar vac"/>`;
+      if(wComplete(e))bars+=`<rect x="${(cx-bw/4).toFixed(1)}" y="${Y(e.out).toFixed(1)}" width="${(bw/2).toFixed(1)}" height="${Math.max(2,Y(e.in)-Y(e.out)).toFixed(1)}" rx="2" class="wk-bar wkend"/>`;}
     else if(e&&isUnpaid(e))bars+=`<rect x="${x0}" y="${T}" width="${bw.toFixed(1)}" height="${ph}" rx="3" class="wk-bar unpaid"/>`;
     else if(e&&e.in!=null){const out=e.out!=null?e.out:Math.max(e.in+0.25,nowHours(iso)),t=wTotal(e);
       bars+=`<rect x="${x0}" y="${Y(out).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(2,Y(e.in)-Y(out)).toFixed(1)}" rx="3" class="wk-bar ${we?'wkend':e.out==null?'wip':'work'}"/>`;
@@ -1341,17 +1345,21 @@ function workSpanChart(k){
 function nowHours(iso){const d=new Date();return iso===todayISO()?d.getHours()+d.getMinutes()/60:0;}
 function workYearChart(y,cmp){
   const ks=[];for(let m=1;m<=12;m++)ks.push(ym(y,m));
-  const cur=ks.map(k=>wStats(wMonth(k))),prev=cmp?ks.map(k=>wStats(wMonth(k-12))):null;
-  const mx=Math.max(10,...cur.map(s=>s.avg||0),...(prev||[]).map(s=>s.avg||0)),top=Math.ceil(mx/2)*2;
-  const L=36,R=10,T=14,B=40,W=760,H=250,ph=H-T-B,pw=W-L-R,slot=pw/12,Y=v=>T+ph-(v/top)*ph;
+  const cur=ks.map(k=>wStats(wMonth(k))),prev=ks.map(k=>wStats(wMonth(k-12)));
+  const yS=wStats(WK().filter(e=>+e.date.slice(0,4)===y)),pS=wStats(WK().filter(e=>+e.date.slice(0,4)===y-1));
+  const mx=Math.max(10,...cur.map(s=>s.avg||0),...prev.map(s=>s.avg||0)),top=Math.ceil(mx/2)*2;
+  const L=36,R=10,T=14,B=40,W=760,H=270,ph=H-T-B,pw=W-L-R,slot=pw/12,bw=slot*0.32,Y=v=>T+ph-(v/top)*ph;
   let g='';for(let v=0;v<=top;v+=2)g+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" class="gl${v===0?' base':''}${v===8?' key':''}"/><text x="${L-6}" y="${Y(v)+4}" class="ax${v===8?' key':''}" text-anchor="end">${v}</text>`;
   let bars='';
-  ks.forEach((k,i)=>{const cx=L+slot*(i+0.5),a=cur[i].avg,bw=cmp?slot*0.32:slot*0.5,xc=cmp?cx+1:cx-bw/2;
+  ks.forEach((k,i)=>{const cx=L+slot*(i+0.5),a=cur[i].avg,xc=cmp?cx+1:cx-bw/2;
     if(cmp){const p=prev[i].avg;if(p!=null)bars+=`<rect x="${(cx-bw-1).toFixed(1)}" y="${Y(p).toFixed(1)}" width="${bw.toFixed(1)}" height="${(Y(0)-Y(p)).toFixed(1)}" rx="3" class="wk-bar prev"><title>${cap1(MONTHS[i])} ${y-1}: Ø ${fmtNum(p)} h/den</title></rect><text x="${(cx-bw/2-1).toFixed(1)}" y="${(Y(p)-5).toFixed(1)}" class="tv sm faintt" text-anchor="middle">${fmtNum(p)}</text>`;}
     if(a!=null)bars+=`<rect x="${xc.toFixed(1)}" y="${Y(a).toFixed(1)}" width="${bw.toFixed(1)}" height="${(Y(0)-Y(a)).toFixed(1)}" rx="3" class="wk-bar work" data-act="work-month" data-k="${k}"><title>${cap1(MONTHS[i])} ${y}: Ø ${fmtNum(a)} h/den · ${cur[i].days} dní · celkem ${fmtNum(cur[i].sum)} h</title></rect><text x="${(xc+bw/2).toFixed(1)}" y="${(Y(a)-5).toFixed(1)}" class="tv sm" text-anchor="middle">${fmtNum(a)}</text>`;
     bars+=`<text x="${cx.toFixed(1)}" y="${H-B+16}" class="ax" text-anchor="middle">${MONTHS_S[i]}</text>`;
     if(cur[i].vac)bars+=`<text x="${cx.toFixed(1)}" y="${H-B+31}" class="tv sm vac" text-anchor="middle">dov ${cur[i].vac}</text>`;});
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Průměr hodin na pracovní den po měsících">${g}${bars}</svg>`;
+  let lines='';
+  if(yS.avg!=null)lines+=`<line x1="${L}" x2="${W-R}" y1="${Y(yS.avg).toFixed(1)}" y2="${Y(yS.avg).toFixed(1)}" class="avgl yr"/>`;
+  if(cmp&&pS.avg!=null)lines+=`<line x1="${L}" x2="${W-R}" y1="${Y(pS.avg).toFixed(1)}" y2="${Y(pS.avg).toFixed(1)}" class="avgl yrp"/>`;
+  return{svg:`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Průměr hodin na pracovní den po měsících">${g}${bars}${lines}</svg>`,yS,pS};
 }
 function viewWork(){
   const k=ui.workK!=null?ui.workK:ymNow(),list=wMonth(k),st=wStats(list),all=WK();
@@ -1370,7 +1378,7 @@ function viewWork(){
   </dl>
   <div class="mnav big"><button class="gear" data-act="work-nav" data-d="-1" aria-label="Předchozí měsíc">‹</button><b>${cap1(MONTHS[ymM(k)-1])} ${ymY(k)}</b><button class="gear" data-act="work-nav" data-d="1" aria-label="Další měsíc">›</button>${k!==ymNow()?'<button class="btn sm ghost" data-act="work-nav" data-d="0">Tento měsíc</button>':''}</div>
   <dl class="kpis month">
-    <div class="kpi"><dt>Ø hodin na den</dt><dd class="lc">${st.avg!=null?fmtNum(st.avg)+' <small>h</small>':'—'}</dd><span class="hint">celkem ${fmtNum(st.sum)} h · ${st.days} ${plural(st.days,'pracovní den','pracovní dny','pracovních dní')}${st.weH?` · víkendy ${fmtNum(st.weH)} h`:''}${st.unpaid?` · ${st.unpaid}× neplacené volno`:''}</span></div>
+    <div class="kpi"><dt>Ø hodin na den</dt><dd class="lc">${st.avg!=null?fmtNum(st.avg)+' <small>h</small>':'—'}</dd><span class="hint">celkem ${fmtNum(st.sum)} h${st.weH?` · z toho víkendy ${fmtNum(st.weH)} h`:''}</span></div>
     <div class="kpi"><dt>Ø příchod</dt><dd>${hm(st.avgIn)}</dd><span class="hint">${range(st.firstIn&&st.firstIn.in,st.lastIn&&st.lastIn.in)}</span></div>
     <div class="kpi"><dt>Ø odchod</dt><dd>${hm(st.avgOut)}</dd><span class="hint">${range(st.firstOut&&st.firstOut.out,st.lastOut&&st.lastOut.out)}</span></div>
     <div class="kpi"><dt>Dovolená</dt><dd class="lc ok">${st.vac} <small>${plural(st.vac,'den','dny','dní')}</small></dd></div>
@@ -1382,8 +1390,7 @@ function viewWork(){
   <section class="card"><div class="card-h"><h2>Ø hodin na pracovní den · ${yy}</h2><div class="view-tools">
     ${hasPrev?`<label class="chk"><input type="checkbox" id="wk-cmp" data-change="work-cmp" ${cmp?'checked':''}> srovnat s ${yy-1}</label>`:''}
     <div class="mnav"><button class="gear" data-act="work-year" data-d="-1" aria-label="Předchozí rok">‹</button><b>${yy}</b><button class="gear" data-act="work-year" data-d="1" aria-label="Další rok">›</button></div></div></div>
-    ${cmp?`<div class="legend"><span><i class="dot" style="--c:var(--accent)"></i>${yy}</span><span><i class="dot" style="--c:var(--muted)"></i>${yy-1}</span></div>`:''}
-    ${workYearChart(yy,cmp&&hasPrev)}</section>`;
+    ${(()=>{const yc=workYearChart(yy,cmp&&hasPrev);return `<div class="legend yr-lg"><span><i class="dot" style="--c:var(--accent)"></i>${yy}</span><span class="avg-lg yr">Ø ${yy}: ${yc.yS.avg!=null?fmtNum(yc.yS.avg)+' h/den':'—'}</span><span class="${cmp&&hasPrev?'':'invis'}"><i class="dot" style="--c:var(--muted)"></i>${yy-1}</span><span class="avg-lg yrp ${cmp&&hasPrev?'':'invis'}">Ø ${yy-1}: ${yc.pS.avg!=null?fmtNum(yc.pS.avg)+' h/den':'—'}</span></div>${yc.svg}`;})()}</section>`;
 }
 function roundNow(){const d=new Date();return Math.round((d.getHours()+d.getMinutes()/60)*12)/12;}
 function openWorkDay(iso){
@@ -1402,14 +1409,14 @@ function openWorkDay(iso){
     const calc=()=>{const tin=parseTime(E.in.value);let tout=parseTime(E.out.value);if(tin!=null&&tout!=null&&tout<=tin)tout+=24;const off=parseDur(E.off.value);
       md.querySelector('#fw-wd').textContent=E.date.value?(isWeekend(E.date.value)?'víkend – hodiny se přičtou, den se do průměru nepočítá':WDS[new Date(E.date.value+'T12:00').getDay()]):'';
       const ty=(f.querySelector('input[name=type]:checked')||{}).value||'';
-      md.querySelector('#fw-thint').textContent=ty==='dovolena'?'Dovolená se eviduje zvlášť a do průměru hodin se nepočítá.':ty==='neplaceno'?'Den se počítá jako pracovní s 0 h, takže snižuje průměr – dopracuješ ho jindy.':'';
-      f.querySelectorAll('#fw-in,#fw-out,#fw-off').forEach(i=>i.disabled=!!ty);
-      md.querySelector('#fw-tot').textContent=ty==='dovolena'?'dovolená':ty==='neplaceno'?'0 h':tin!=null&&tout!=null?hmDur(tout-tin-off)+' h':off<0?hmDur(-off)+' h':tin!=null?'v práci':'—';return{tin,tout,off};};
+      md.querySelector('#fw-thint').textContent=ty==='dovolena'?'Dovolená se eviduje zvlášť. Bez času se nepočítá jako pracovní den; když vyplníš čas (pracoval jsi), počítá se do průměru jako pracovní den.':ty==='neplaceno'?'Den se počítá jako pracovní s 0 h, takže snižuje průměr – dopracuješ ho jindy.':'';
+      f.querySelectorAll('#fw-in,#fw-out,#fw-off').forEach(i=>i.disabled=ty==='neplaceno');
+      md.querySelector('#fw-tot').textContent=ty==='dovolena'&&!(tin!=null&&tout!=null)?'dovolená':ty==='neplaceno'?'0 h':tin!=null&&tout!=null?hmDur(tout-tin-off)+' h':off<0?hmDur(-off)+' h':tin!=null?'v práci':'—';return{tin,tout,off};};
     f.addEventListener('input',calc);calc();
     const del=md.querySelector('#fw-del');if(del)del.addEventListener('click',()=>{if(!armed(del,'Opravdu smazat?'))return;state.worklog=WK().filter(x=>x!==e);closeModal();commit('Den smazán');});
     f.addEventListener('submit',ev=>{ev.preventDefault();const {tin,tout,off}=calc(),date=E.date.value;if(!date)return;
       const ty=(f.querySelector('input[name=type]:checked')||{}).value||'';
-      const rec={date,in:ty?null:tin,out:ty?null:tout,off:ty?0:off,note:E.note.value.trim(),type:ty||undefined};
+      const un=ty==='neplaceno';const rec={date,in:un?null:tin,out:un?null:tout,off:un?0:off,note:E.note.value.trim(),type:ty||undefined};
       if(!ty&&rec.in==null&&rec.out==null&&!rec.off){toast('Zadejte příchod a odchod, nebo zvolte typ dne');return;}
       const ex=WK().find(x=>x.date===date&&x!==e);if(ex){state.worklog=WK().filter(x=>x!==ex);}
       if(e){Object.assign(e,rec);if(!ty)delete e.type;}else{const n={id:uid(),...rec};if(!ty)delete n.type;WK().push(n);}
