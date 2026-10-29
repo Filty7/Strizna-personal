@@ -158,6 +158,23 @@ textarea.inp{resize:vertical;line-height:1.45}
 .auth-links{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .auth-links button{background:none;border:0;color:var(--muted);text-decoration:underline;cursor:pointer;padding:0;font-size:12.5px}
 .auth .btn.primary{justify-content:center}
+.wk-we{fill:var(--surface-2);opacity:.55}
+.wk-bar{cursor:pointer;fill:var(--ok)}
+.wk-bar.short{fill:var(--warn)} .wk-bar.long{fill:var(--bad)} .wk-bar.wip{fill:var(--info);opacity:.7}
+.wk-bar:hover{opacity:.8}
+.chart .tv.sm{font-size:9.5px}
+.chart .ax.we{fill:var(--muted)}
+.mnav.big{font-size:16px;gap:10px}
+.mnav.big b{min-width:150px;text-align:center}
+.wk-d{cursor:pointer;text-align:left;font:inherit;color:inherit}
+.wk-d:hover{border-color:var(--accent)}
+.wk-d small{font-size:10.5px;color:var(--muted);line-height:1.2}
+.wk-d.volno{opacity:.6}
+.facts.one{grid-template-columns:1fr}
+.linkish{background:none;border:0;padding:0;color:var(--fg);font:inherit;font-weight:600;cursor:pointer}
+.linkish:hover{text-decoration:underline}
+.chk{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted)}
+.chk input{accent-color:var(--accent);width:16px;height:16px}
 .lc{font-weight:600}
 .lc.ok,.lc.ok b{color:var(--ok)} .lc.mid,.lc.mid b{color:var(--accent)} .lc.bad,.lc.bad b{color:var(--bad)}
 .lc small{color:var(--muted)}
@@ -271,7 +288,8 @@ textarea.inp{resize:vertical;line-height:1.45}
 .seg button[aria-pressed="true"]{background:var(--surface-2);color:var(--fg)}
 .closed-banner{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 14px;border-radius:10px;background:rgba(143,182,232,.08);border:1px solid rgba(143,182,232,.3);color:var(--info);font-size:13px}
 
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:10px}
+@media (max-width:560px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi dd{font-size:18px}}
 .kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;gap:4px;align-content:start;min-width:0}
 .kpi dt{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
 .kpi dd{margin:0;font-size:21px;font-weight:600;line-height:1.2}
@@ -517,6 +535,7 @@ th[aria-sort="ascending"],th[aria-sort="descending"]{color:var(--fg)}
       <button data-act="nav" data-v="projects">Projekty <span id="n-p"></span></button>
       <button data-act="nav" data-v="directory">Adresář <span id="n-d"></span></button>
       <button data-act="nav" data-v="archive">Archiv <span id="n-a"></span></button>
+      <button data-act="nav" data-v="work">Docházka</button>
     </nav>
     <label class="search">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
@@ -753,6 +772,14 @@ function seed(){
   build({name:'Zimní liga',company:'Studio Ostrov',created:'2026-01-12',closedAt:'2026-06-15',tag:'levandule',ratio:1.04,estRatio:1.05,
     notes:[['2026-06-15','Projekt uzavřen. Lehce přes rozpočet kvůli přestříhání finálového dílu. Jakubovi zbývá doplatit 4 500 Kč za červen.']],
     team:[{i:1,rate:6500,base:120,rating:5},{i:2,rate:3800,base:140,rating:4,unpaid:4500},{i:3,from:'2026-05-04',rate:7000,base:35,rating:5},{i:5,from:'2026-02-02',rate:2800,base:80,rating:3},{i:8,from:'2026-05-18',rate:5500,base:20,rating:4}]});
+  { // ukázková docházka: poslední 3 měsíce
+    const Rw=mulberry32(77),now=ymNow(),t=todayISO();S.worklog=[];
+    for(let k=now-2;k<=now;k++){const y=ymY(k),m=ymM(k),dim=new Date(Date.UTC(y,m,0)).getUTCDate();
+      for(let d=1;d<=dim;d++){const iso=`${y}-${pad(m)}-${pad(d)}`;if(iso>=t)break;const wd=new Date(iso+'T12:00').getDay(),we=wd===0||wd===6;
+        if(we&&Rw()>0.12)continue;if(!we&&Rw()<0.06){S.worklog.push({id:uid(),date:iso,in:null,out:null,off:0,note:'',volno:true});continue;}
+        const tin=Math.round((we?11:8.75+Rw()*2.2)*4)/4,len=we?3+Rw()*4:7.5+Rw()*3.5,off=Rw()<0.4?Math.round(Rw()*6)/4:0;
+        S.worklog.push({id:uid(),date:iso,in:tin,out:Math.round((tin+len+off)*4)/4,off,note:'',volno:false});}}
+  }
   return S;
 }
 
@@ -1230,6 +1257,141 @@ function viewSummary(id){
   ${last?`<section class="card"><div class="card-h"><h2>Poslední poznámka · ${fmtDate(last.date)}</h2></div><p>${esc(last.text)}</p></section>`:''}`;
 }
 
+/* ---------- docházka (osobní příchody / odchody) ----------
+   state.worklog[] = {id, date 'YYYY-MM-DD', in, out (desetinné hodiny, out může být > 24 = po půlnoci), off (pauza, záporné = přidané hodiny), note, volno (bool)}
+   Den = odchod − příchod − pauza. Průměr na den = všechny hodiny měsíce (i víkendy) / počet odpracovaných pracovních dnů (Po–Pá s příchodem i odchodem).
+   Víkendové příchody/odchody se do statistik časů nepočítají. */
+const WK=()=>state.worklog||(state.worklog=[]);
+const isWeekend=iso=>{const d=new Date(iso+'T12:00').getDay();return d===0||d===6;};
+const WDS=['ne','po','út','st','čt','pá','so'];
+const wdOf=iso=>WDS[new Date(iso+'T12:00').getDay()];
+function hm(x,plus){if(x==null||isNaN(x))return '—';let v=Math.round(x*60),day=0;while(v>=1440){v-=1440;day++;}const s=`${Math.floor(v/60)}:${pad(v%60)}`;return day&&plus!==false?s+' +1':s;}
+function hmDur(x){if(x==null)return '—';const neg=x<0;let v=Math.round(Math.abs(x)*60);return (neg?'−':'')+Math.floor(v/60)+':'+pad(v%60);}
+function parseTime(s){s=String(s||'').trim();if(!s)return null;let m=s.match(/^(\d{1,2})[:.,](\d{1,2})$/);if(m&&s.includes(':'))return +m[1]+(+m[2])/60;if(/^\d{1,2}:\d{2}$/.test(s)){const [a,b]=s.split(':');return +a+(+b)/60;}const v=parseNum(s);return isFinite(v)?v:null;}
+function parseDur(s){s=String(s||'').trim();if(!s)return 0;const neg=/^[-−]/.test(s);s=s.replace(/^[-−+]/,'');let v;if(s.includes(':')){const [a,b]=s.split(':');v=(+a||0)+(+b||0)/60;}else v=parseNum(s);return neg?-v:v;}
+const toTimeInput=x=>{if(x==null)return '';let v=Math.round(x*60)%1440;return pad(Math.floor(v/60))+':'+pad(v%60);};
+const wComplete=e=>e.in!=null&&e.out!=null;
+function wTotal(e){if(e.volno)return 0;if(e.in!=null&&e.out==null)return null;return (wComplete(e)?e.out-e.in:0)-(+e.off||0);}
+const wWorkday=e=>!e.volno&&!isWeekend(e.date)&&wComplete(e);
+function wStats(list){
+  const done=list.filter(e=>wTotal(e)!=null),wd=list.filter(wWorkday),we=done.filter(e=>isWeekend(e.date)&&!e.volno);
+  const sum=done.reduce((a,e)=>a+wTotal(e),0),weH=we.reduce((a,e)=>a+wTotal(e),0);
+  const pick=(arr,f,cmp)=>arr.reduce((b,e)=>b==null||cmp(f(e),f(b))?e:b,null);
+  const avg=(arr,f)=>arr.length?arr.reduce((a,e)=>a+f(e),0)/arr.length:null;
+  return{sum,days:wd.length,avg:wd.length?sum/wd.length:null,weH,weDays:we.length,volno:list.filter(e=>e.volno).length,
+    avgIn:avg(wd,e=>e.in),avgOut:avg(wd,e=>e.out),
+    firstIn:pick(wd,e=>e.in,(a,b)=>a<b),lastIn:pick(wd,e=>e.in,(a,b)=>a>b),firstOut:pick(wd,e=>e.out,(a,b)=>a<b),lastOut:pick(wd,e=>e.out,(a,b)=>a>b),
+    longest:pick(done.filter(e=>!e.volno),wTotal,(a,b)=>a>b)};
+}
+const wMonth=k=>WK().filter(e=>ymOf(e.date)===k).sort((a,b)=>a.date.localeCompare(b.date));
+const wFmtH=h=>h==null?'—':`${fmtNum(h)} h`;
+function workSpanChart(k){
+  const y=ymY(k),m=ymM(k),dim=new Date(Date.UTC(y,m,0)).getUTCDate(),list=wMonth(k),by={};list.forEach(e=>by[e.date]=e);
+  const ins=list.filter(e=>e.in!=null).map(e=>e.in),outs=list.filter(wComplete).map(e=>e.out);
+  let lo=Math.min(7,...ins.map(Math.floor)),hi=Math.max(20,...outs.map(Math.ceil));lo=Math.max(0,lo);hi=Math.min(30,hi);
+  const L=44,R=12,T=18,B=30,slot=24,W=Math.max(620,L+R+dim*slot),H=260,ph=H-T-B,Y=v=>T+(v-lo)/(hi-lo)*ph,st=wStats(list);
+  let g='';for(let v=lo;v<=hi;v+=2)g+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" class="gl"/><text x="${L-6}" y="${Y(v)+4}" class="ax" text-anchor="end">${v%24}:00</text>`;
+  let bars='';
+  for(let d=1;d<=dim;d++){const iso=`${y}-${pad(m)}-${pad(d)}`,e=by[iso],cx=L+slot*(d-0.5),we=isWeekend(iso);
+    if(we)bars+=`<rect x="${L+slot*(d-1)}" y="${T}" width="${slot}" height="${ph}" class="wk-we"/>`;
+    if(e&&e.volno)bars+=`<text x="${cx}" y="${T+ph/2}" class="ax" text-anchor="middle">vol</text>`;
+    else if(e&&e.in!=null){const out=e.out!=null?e.out:Math.max(e.in+0.25,nowHours(iso)),t=wTotal(e),cls=e.out==null?'wip':t>=10?'long':t>=7.5?'ok':'short';
+      bars+=`<rect x="${(cx-7).toFixed(1)}" y="${Y(e.in).toFixed(1)}" width="14" height="${Math.max(2,Y(out)-Y(e.in)).toFixed(1)}" rx="3" class="wk-bar ${cls}" data-act="work-day" data-date="${iso}"><title>${d}. ${m}. ${wdOf(iso)} · ${hm(e.in)}–${e.out!=null?hm(e.out):'v práci'}${e.off?' · pauza '+hmDur(e.off):''} · ${t!=null?hmDur(t)+' h':''}${e.note?' · '+esc(e.note):''}</title></rect>`;
+      if(t!=null)bars+=`<text x="${cx}" y="${Y(out)+12}" class="tv sm" text-anchor="middle">${fmtNum(t)}</text>`;}
+    else if(e&&wTotal(e))bars+=`<text x="${cx}" y="${T+ph-6}" class="tv sm" text-anchor="middle">+${fmtNum(wTotal(e))}</text>`;
+    bars+=`<text x="${cx}" y="${H-B+16}" class="ax${we?' we':''}" text-anchor="middle">${d}</text>`;}
+  let lines='';if(st.avgIn!=null)lines+=`<line x1="${L}" x2="${W-R}" y1="${Y(st.avgIn)}" y2="${Y(st.avgIn)}" class="avgl"/><text x="${W-R}" y="${Y(st.avgIn)-4}" class="avgt" text-anchor="end">Ø příchod ${hm(st.avgIn)}</text>`;
+  if(st.avgOut!=null)lines+=`<line x1="${L}" x2="${W-R}" y1="${Y(st.avgOut)}" y2="${Y(st.avgOut)}" class="avgl"/><text x="${W-R}" y="${Y(st.avgOut)-4}" class="avgt" text-anchor="end">Ø odchod ${hm(st.avgOut)}</text>`;
+  return `<div class="chart-scroll"><svg class="chart" viewBox="0 0 ${W} ${H}" style="min-width:${W}px" role="img" aria-label="Příchody a odchody po dnech">${g}${bars}${lines}</svg></div>`;
+}
+function nowHours(iso){const d=new Date();return iso===todayISO()?d.getHours()+d.getMinutes()/60:0;}
+function workMonthsChart(keys){
+  const data=keys.map(k=>({k,s:wStats(wMonth(k))}));const mx=Math.max(10,...data.map(x=>x.s.avg||0));
+  const L=40,R=12,T=20,B=30,slot=48,W=Math.max(620,L+R+keys.length*slot),H=220,ph=H-T-B,top=Math.ceil(mx),Y=v=>T+ph-(v/top)*ph;
+  let g='';for(let v=0;v<=top;v+=2)g+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" class="gl${v===0?' base':''}"/><text x="${L-6}" y="${Y(v)+4}" class="ax" text-anchor="end">${v}</text>`;
+  g+=`<line x1="${L}" x2="${W-R}" y1="${Y(8)}" y2="${Y(8)}" class="capl"/><text x="${W-R}" y="${Y(8)-5}" class="capt" text-anchor="end">8 h</text>`;
+  let bars='';data.forEach((x,i)=>{const cx=L+slot*(i+0.5),a=x.s.avg;if(a!=null){bars+=`<rect x="${cx-12}" y="${Y(a)}" width="24" height="${Y(0)-Y(a)}" rx="3" class="wk-bar ${a>=10?'long':a>=7.5?'ok':'short'}" data-act="work-month" data-k="${x.k}"><title>${cap1(MONTHS[ymM(x.k)-1])} ${ymY(x.k)}: Ø ${fmtNum(a)} h/den · ${x.s.days} dní · celkem ${fmtNum(x.s.sum)} h</title></rect><text x="${cx}" y="${Y(a)-5}" class="tv" text-anchor="middle">${fmtNum(a)}</text>`;}
+    bars+=`<text x="${cx}" y="${H-B+16}" class="ax" text-anchor="middle">${MONTHS_S[ymM(x.k)-1]}${ymM(x.k)===1||i===0?' ’'+String(ymY(x.k)).slice(2):''}</text>`;});
+  return `<div class="chart-scroll" data-sx="${W}" data-w="${W}"><svg class="chart" viewBox="0 0 ${W} ${H}" style="min-width:${W}px" role="img" aria-label="Průměr hodin na den po měsících">${g}${bars}</svg></div>`;
+}
+function viewWork(){
+  const k=ui.workK!=null?ui.workK:ymNow(),list=wMonth(k),st=wStats(list),all=WK();
+  const today=todayISO(),te=all.find(e=>e.date===today);
+  const keysAll=[...new Set(all.map(e=>ymOf(e.date)))].sort((a,b)=>a-b);
+  const from=keysAll.length?Math.max(keysAll[0],ymNow()-23):ymNow(),keys=[];for(let x=from;x<=ymNow();x++)keys.push(x);
+  const y12=[];for(let x=ymNow()-11;x<=ymNow();x++)y12.push(...wMonth(x));const s12=wStats(y12),sAll=wStats(all);
+  const dimN=new Date(Date.UTC(ymY(k),ymM(k),0)).getUTCDate(),first=(new Date(Date.UTC(ymY(k),ymM(k)-1,1)).getUTCDay()+6)%7,by={};list.forEach(e=>by[e.date]=e);
+  let cal='';for(let i=0;i<first;i++)cal+='<div class="cal-e"></div>';
+  for(let d=1;d<=dimN;d++){const iso=`${ymY(k)}-${pad(ymM(k))}-${pad(d)}`,e=by[iso],t=e?wTotal(e):null,we=isWeekend(iso);
+    cal+=`<button class="cal-d wk-d${we?' we':''}${iso===today?' td-today':''}${e?' on':''}${e&&e.volno?' volno':''}" data-act="work-day" data-date="${iso}"><span class="cal-n">${d}</span>${e?(e.volno?'<b class="muted">volno</b>':`<b>${t!=null?hmDur(t):'v práci'}</b><small>${e.in!=null?hm(e.in,false)+'–'+(e.out!=null?hm(e.out):'…'):'přidáno'}${e.off?` · ${e.off<0?'+':'−'}${hmDur(Math.abs(e.off))}`:''}</small>`):''}</button>`;}
+  const fact=(lab,e,f)=>`<div><dt>${lab}</dt><dd>${e?hm(f(e)):'—'}</dd>${e?`<span>${fmtDate(e.date)} · ${wdOf(e.date)}</span>`:''}</div>`;
+  const rows=keys.slice().reverse().map(x=>{const s=wStats(wMonth(x));if(!s.days&&!s.sum)return '';return `<tr><th scope="row"><button class="linkish" data-act="work-month" data-k="${x}">${cap1(MONTHS[ymM(x)-1])} ${ymY(x)}</button></th><td class="num">${s.days}</td><td class="num">${fmtNum(s.sum)} h</td><td class="num"><b>${s.avg!=null?fmtNum(s.avg):'—'}</b></td><td class="num">${hm(s.avgIn)}</td><td class="num">${hm(s.avgOut)}</td><td class="num">${s.firstIn?hm(s.firstIn.in):'—'}</td><td class="num">${s.lastOut?hm(s.lastOut.out):'—'}</td><td class="num">${s.weH?fmtNum(s.weH)+' h':'—'}</td></tr>`;}).join('');
+  const qa=!te?`<button class="btn" data-act="work-now" data-w="in">Přicházím ${hm(roundNow(),false)}</button>`:te.out==null&&te.in!=null?`<button class="btn" data-act="work-now" data-w="out">Odcházím ${hm(roundNow(),false)}</button>`:'';
+  return `<div class="view-head"><div><p class="eyebrow">Moje docházka</p><h1>Docházka</h1></div>
+    <div class="view-tools">${qa}<button class="btn primary" data-act="work-day" data-date="${today}">+ Zapsat den</button><button class="btn ghost" data-act="work-import">Import</button></div></div>
+  <div class="mnav big"><button class="gear" data-act="work-nav" data-d="-1" aria-label="Předchozí měsíc">‹</button><b>${cap1(MONTHS[ymM(k)-1])} ${ymY(k)}</b><button class="gear" data-act="work-nav" data-d="1" aria-label="Další měsíc">›</button>${k!==ymNow()?'<button class="btn sm ghost" data-act="work-nav" data-d="0">Tento měsíc</button>':''}</div>
+  <dl class="kpis">
+    <div class="kpi"><dt>Odpracováno</dt><dd>${fmtNum(st.sum)} <small>h · ${num1(st.sum/8)} d</small></dd></div>
+    <div class="kpi"><dt>Pracovní dny</dt><dd>${st.days}</dd>${st.volno?`<span class="hint">+ ${st.volno} ${plural(st.volno,'den','dny','dní')} volna</span>`:''}</div>
+    <div class="kpi"><dt>Ø na pracovní den</dt><dd class="lc ${st.avg==null?'':st.avg>=10?'bad':st.avg>=7.5?'ok':'mid'}">${st.avg!=null?fmtNum(st.avg)+' <small>h</small>':'—'}</dd><span class="hint">víkendy se přičítají, ale nepočítají jako den</span></div>
+    <div class="kpi"><dt>Víkendy</dt><dd>${st.weH?fmtNum(st.weH)+' <small>h</small>':'—'}</dd>${st.weDays?`<span class="hint">${st.weDays} ${plural(st.weDays,'den','dny','dní')}</span>`:''}</div>
+    <div class="kpi"><dt>Ø příchod / odchod</dt><dd>${hm(st.avgIn)} <small>–</small> ${hm(st.avgOut)}</dd></div>
+  </dl>
+  <dl class="facts">${fact('Nejdřív příchod',st.firstIn,e=>e.in)}${fact('Nejpozději příchod',st.lastIn,e=>e.in)}${fact('Nejdřív odchod',st.firstOut,e=>e.out)}${fact('Nejpozději odchod',st.lastOut,e=>e.out)}<div><dt>Nejdelší den</dt><dd>${st.longest?hmDur(wTotal(st.longest))+' h':'—'}</dd>${st.longest?`<span>${fmtDate(st.longest.date)} · ${wdOf(st.longest.date)}</span>`:''}</div></dl>
+  <section class="card"><div class="card-h"><h2>Příchody a odchody</h2><div class="legend"><span><i class="dot" style="--c:var(--warn)"></i>pod 7,5 h</span><span><i class="dot" style="--c:var(--ok)"></i>7,5–10 h</span><span><i class="dot" style="--c:var(--bad)"></i>10 h a víc</span></div></div>${workSpanChart(k)}</section>
+  <div class="detail"><div>
+    <section class="card"><div class="card-h"><h2>Kalendář</h2><span class="hint">klepněte na den pro zápis</span></div><div class="cal">${['po','út','st','čt','pá','so','ne'].map(x=>`<div class="cal-w">${x}</div>`).join('')}${cal}</div></section>
+    <section class="card"><div class="card-h"><h2>Ø hodin na pracovní den po měsících</h2></div>${workMonthsChart(keys)}</section>
+    <section class="card"><div class="card-h"><h2>Přehled po měsících</h2></div><div class="tscroll"><table class="tbl compact"><thead><tr><th>Měsíc</th><th class="num">Dny</th><th class="num">Celkem</th><th class="num">Ø/den</th><th class="num">Ø příchod</th><th class="num">Ø odchod</th><th class="num">Nejdřív</th><th class="num">Nejpozději</th><th class="num">Víkendy</th></tr></thead><tbody>${rows||'<tr><td colspan="9" class="faint">Zatím žádné záznamy.</td></tr>'}</tbody></table></div></section>
+  </div><div>
+    <section class="card"><div class="card-h"><h2>Dlouhodobě</h2></div><dl class="facts one">
+      <div><dt>Ø na den · posledních 12 měsíců</dt><dd>${s12.avg!=null?fmtNum(s12.avg)+' h':'—'}</dd><span>${s12.days} pracovních dní · ${fmtNum(s12.sum)} h</span></div>
+      <div><dt>Ø příchod / odchod · 12 měsíců</dt><dd>${hm(s12.avgIn)} – ${hm(s12.avgOut)}</dd></div>
+      <div><dt>Ø na den · celkově</dt><dd>${sAll.avg!=null?fmtNum(sAll.avg)+' h':'—'}</dd><span>${sAll.days} pracovních dní od ${all.length?fmtDate(all.map(e=>e.date).sort()[0]):'—'}</span></div>
+    </dl></section>
+  </div></div>`;
+}
+function roundNow(){const d=new Date();return Math.round((d.getHours()+d.getMinutes()/60)*12)/12;}
+function openWorkDay(iso){
+  const e=WK().find(x=>x.date===iso);
+  modal(e?'Upravit den':'Zapsat den',`<form id="fw" class="form">
+    <div class="frow" style="align-items:flex-end"><label class="fld w-date"><span>Den</span><input class="inp" type="date" name="date" id="fw-date" value="${iso}" required></label><span class="hint" id="fw-wd" style="padding-bottom:10px"></span></div>
+    <div class="frow"><label class="fld grow"><span>Příchod</span><input class="inp" type="time" name="in" id="fw-in" value="${e?toTimeInput(e.in):''}"></label>
+    <label class="fld grow"><span>Odchod <i>po půlnoci = další den</i></span><input class="inp" type="time" name="out" id="fw-out" value="${e?toTimeInput(e.out):''}"></label>
+    <label class="fld w-sm"><span>Pauza <i>h:mm</i></span><input class="inp" name="off" id="fw-off" inputmode="decimal" placeholder="0:00" value="${e&&e.off?hmDur(e.off).replace('−','-'):''}" autocomplete="off"></label></div>
+    <label class="fld"><span>Poznámka <i>nepovinné</i></span><input class="inp" name="note" id="fw-note" value="${esc(e&&e.note||'')}" autocomplete="off"></label>
+    <label class="chk"><input type="checkbox" name="volno" id="fw-volno" ${e&&e.volno?'checked':''}> Volno (dovolená, svátek, nemoc) – do průměrů se nepočítá</label>
+    <div class="logtotal"><span>Odpracováno</span><b id="fw-tot">—</b></div>
+    ${footer('Uložit',e?'<button type="button" class="btn danger" id="fw-del">Smazat den</button>':'')}</form>`,{onMount(md){
+    const f=md.querySelector('#fw'),E=f.elements;
+    const calc=()=>{const tin=parseTime(E.in.value);let tout=parseTime(E.out.value);if(tin!=null&&tout!=null&&tout<=tin)tout+=24;const off=parseDur(E.off.value);
+      md.querySelector('#fw-wd').textContent=E.date.value?(isWeekend(E.date.value)?'víkend – hodiny se přičtou, den se do průměru nepočítá':WDS[new Date(E.date.value+'T12:00').getDay()]):'';
+      md.querySelector('#fw-tot').textContent=E.volno.checked?'volno':tin!=null&&tout!=null?hmDur(tout-tin-off)+' h':off<0?hmDur(-off)+' h':tin!=null?'v práci':'—';return{tin,tout,off};};
+    f.addEventListener('input',calc);calc();
+    const del=md.querySelector('#fw-del');if(del)del.addEventListener('click',()=>{if(!armed(del,'Opravdu smazat?'))return;state.worklog=WK().filter(x=>x!==e);closeModal();commit('Den smazán');});
+    f.addEventListener('submit',ev=>{ev.preventDefault();const {tin,tout,off}=calc(),date=E.date.value;if(!date)return;
+      const rec={date,in:E.volno.checked?null:tin,out:E.volno.checked?null:tout,off:E.volno.checked?0:off,note:E.note.value.trim(),volno:E.volno.checked};
+      if(!rec.volno&&rec.in==null&&rec.out==null&&!rec.off){toast('Zadejte příchod a odchod, nebo zaškrtněte volno');return;}
+      const ex=WK().find(x=>x.date===date&&x!==e);if(ex){state.worklog=WK().filter(x=>x!==ex);}
+      if(e)Object.assign(e,rec);else WK().push({id:uid(),...rec});
+      ui.workK=ymOf(date);closeModal();commit('Uloženo');});
+  }});
+}
+function openWorkImport(){
+  modal('Import docházky',`<div class="form"><p class="hint">Vyberte soubor s exportem docházky (.json). Dny, které už v aplikaci máte, se nepřepíšou.</p>
+    <input type="file" accept=".json,application/json,text/plain" id="wi-file" class="inp"><p class="err" id="wi-err" hidden></p>
+    <footer class="m-foot"><span class="spacer"></span><button class="btn ghost" data-act="close-modal">Zrušit</button><button class="btn primary" id="wi-go" disabled>Importovat</button></footer></div>`,{noFocus:true,onMount(m){
+    let data=null;const err=m.querySelector('#wi-err'),go=m.querySelector('#wi-go');
+    m.querySelector('#wi-file').addEventListener('change',e=>{const fl=e.target.files[0];if(!fl)return;const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);data=Array.isArray(j)?j:(j.entries||j.worklog);if(!Array.isArray(data))throw 0;err.hidden=true;go.disabled=false;go.textContent=`Importovat ${data.length} dní`;}catch(x){err.textContent='Soubor se nepodařilo přečíst.';err.hidden=false;go.disabled=true;}};r.readAsText(fl);});
+    go.addEventListener('click',()=>{if(!data)return;const have=new Set(WK().map(e=>e.date));let n=0;
+      data.forEach(e=>{if(!e||!/^\d{4}-\d{2}-\d{2}$/.test(e.date)||have.has(e.date))return;WK().push({id:uid(),date:e.date,in:e.in??null,out:e.out??null,off:+e.off||0,note:e.note||'',volno:!!e.volno});have.add(e.date);n++;});
+      closeModal();commit(`Importováno ${n} dní`);});
+  }});
+}
+function workNow(w){const t=todayISO(),v=roundNow();let e=WK().find(x=>x.date===t);
+  if(w==='in'){if(!e){WK().push({id:uid(),date:t,in:v,out:null,off:0,note:'',volno:false});}else e.in=v;commit(`Příchod ${hm(v)}`);}
+  else if(e){e.out=v<=e.in?v+24:v;commit(`Odchod ${hm(e.out)} · ${hmDur(wTotal(e))} h`);}}
+
 /* ---------- render & navigation ---------- */
 function render(){
   invalidateSched();
@@ -1237,7 +1399,7 @@ function render(){
   $('#n-p').textContent=n;$('#n-d').textContent=state.people.length;$('#n-a').textContent=state.projects.length-n;
   const sec=ui.view==='person'?'directory':ui.view==='summary'?'archive':ui.view==='project'?((getP(ui.id)||{}).status==='closed'?'archive':'projects'):ui.view;
   document.querySelectorAll('#nav button').forEach(b=>b.setAttribute('aria-current',b.dataset.v===sec?'page':'false'));
-  const V={projects:viewProjects,directory:viewDirectory,archive:viewArchive,project:()=>viewProject(ui.id),person:()=>viewPerson(ui.id),summary:()=>viewSummary(ui.id)};
+  const V={projects:viewProjects,directory:viewDirectory,archive:viewArchive,project:()=>viewProject(ui.id),person:()=>viewPerson(ui.id),summary:()=>viewSummary(ui.id),work:viewWork};
   $('#view').innerHTML=(V[ui.view]||viewProjects)();
   document.querySelectorAll('.chart-scroll[data-sx]').forEach(el=>{const sv=el.querySelector('svg');const sc=(sv.getBoundingClientRect().width||+el.dataset.w)/(+el.dataset.w);el.scrollLeft=Math.max(0,(+el.dataset.sx)*sc-el.clientWidth*0.6);});
 }
@@ -1545,6 +1707,11 @@ const ACTS={
   'set-tag':t=>{const o=t.dataset.kind==='person'?getPer(t.dataset.id):getP(t.dataset.id);o.tag=t.dataset.tag;commit();},
   copy:t=>{const v=t.dataset.text;try{navigator.clipboard.writeText(v).then(()=>{t.textContent='zkopírováno';},()=>{t.textContent='nepodařilo se';});}catch(e){t.textContent='nepodařilo se';}},
   'open-day':t=>openDay(t.dataset.pid,t.dataset.per,t.dataset.date),
+  'work-day':t=>openWorkDay(t.dataset.date),
+  'work-nav':t=>{const d=+t.dataset.d;ui.workK=d===0?ymNow():(ui.workK!=null?ui.workK:ymNow())+d;render();},
+  'work-month':t=>{ui.workK=+t.dataset.k;render();window.scrollTo(0,0);},
+  'work-import':()=>openWorkImport(),
+  'work-now':t=>workNow(t.dataset.w),
   'day-nav':t=>{ui.dayK=(ui.dayK!=null?ui.dayK:ymNow())+(+t.dataset.d);render();},
   'apply-deadline':t=>{const p=getP(t.dataset.id);const old=p.deadline;p.deadline=t.dataset.d;p.notes.push({id:uid(),date:todayISO(),ts:Date.now(),text:`Deadline posunut z ${fmtDate(old)} na ${fmtDate(p.deadline)} (podle předpovědi).`});commit('Deadline posunut');},
   scope:t=>{ui.scope=t.dataset.s;savePrefs();render();},
