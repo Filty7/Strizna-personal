@@ -169,7 +169,17 @@ textarea.inp{resize:vertical;line-height:1.45}
 .wk-d{cursor:pointer;text-align:left;font:inherit;color:inherit}
 .wk-d:hover{border-color:var(--accent)}
 .wk-d small{font-size:10.5px;color:var(--muted);line-height:1.2}
-.wk-d.volno{opacity:.6}
+.wk-d.vac{background:rgba(124,194,154,.18);border-color:rgba(124,194,154,.45)}
+.wk-d.vac b{color:var(--ok)}
+.wk-d.unpaid b{color:var(--warn)}
+.wk-bar.vac{fill:rgba(124,194,154,.28);stroke:var(--ok);stroke-width:1}
+.chart .tv.vac{fill:var(--ok)}
+.wk-type{flex-wrap:wrap}
+.wk-type label{position:relative;cursor:pointer}
+.wk-type input{position:absolute;opacity:0;width:1px;height:1px}
+.wk-type span{display:block;padding:8px 12px;font-size:12.5px;font-weight:700;color:var(--muted)}
+.wk-type input:checked+span{background:var(--surface-2);color:var(--fg)}
+.wk-type input:focus-visible+span{outline:2px solid var(--accent)}
 .facts.one{grid-template-columns:1fr}
 .linkish{background:none;border:0;padding:0;color:var(--fg);font:inherit;font-weight:600;cursor:pointer}
 .linkish:hover{text-decoration:underline}
@@ -776,9 +786,9 @@ function seed(){
     const Rw=mulberry32(77),now=ymNow(),t=todayISO();S.worklog=[];
     for(let k=now-2;k<=now;k++){const y=ymY(k),m=ymM(k),dim=new Date(Date.UTC(y,m,0)).getUTCDate();
       for(let d=1;d<=dim;d++){const iso=`${y}-${pad(m)}-${pad(d)}`;if(iso>=t)break;const wd=new Date(iso+'T12:00').getDay(),we=wd===0||wd===6;
-        if(we&&Rw()>0.12)continue;if(!we&&Rw()<0.06){S.worklog.push({id:uid(),date:iso,in:null,out:null,off:0,note:'',volno:true});continue;}
+        if(we&&Rw()>0.12)continue;if(!we&&Rw()<0.06){S.worklog.push({id:uid(),date:iso,in:null,out:null,off:0,note:'',type:Rw()<0.7?'dovolena':'neplaceno'});continue;}
         const tin=Math.round((we?11:8.75+Rw()*2.2)*4)/4,len=we?3+Rw()*4:7.5+Rw()*3.5,off=Rw()<0.4?Math.round(Rw()*6)/4:0;
-        S.worklog.push({id:uid(),date:iso,in:tin,out:Math.round((tin+len+off)*4)/4,off,note:'',volno:false});}}
+        S.worklog.push({id:uid(),date:iso,in:tin,out:Math.round((tin+len+off)*4)/4,off,note:''});}}
   }
   return S;
 }
@@ -1261,7 +1271,9 @@ function viewSummary(id){
    state.worklog[] = {id, date 'YYYY-MM-DD', in, out (desetinné hodiny, out může být > 24 = po půlnoci), off (pauza, záporné = přidané hodiny), note, volno (bool)}
    Den = odchod − příchod − pauza. Průměr na den = všechny hodiny měsíce (i víkendy) / počet odpracovaných pracovních dnů (Po–Pá s příchodem i odchodem).
    Víkendové příchody/odchody se do statistik časů nepočítají. */
-const WK=()=>state.worklog||(state.worklog=[]);
+const WK=()=>{const w=state.worklog||(state.worklog=[]);w.forEach(e=>{if(e.volno&&!e.type){e.type='dovolena';}delete e.volno;});return w;};
+/* typ dne: (prázdné) = práce, 'dovolena' = dovolená (do průměru se nepočítá, eviduje se), 'neplaceno' = neplacené volno (pracovní den s 0 h, do průměru se počítá) */
+const isVac=e=>e.type==='dovolena',isUnpaid=e=>e.type==='neplaceno';
 const isWeekend=iso=>{const d=new Date(iso+'T12:00').getDay();return d===0||d===6;};
 const WDS=['ne','po','út','st','čt','pá','so'];
 const wdOf=iso=>WDS[new Date(iso+'T12:00').getDay()];
@@ -1271,17 +1283,18 @@ function parseTime(s){s=String(s||'').trim();if(!s)return null;let m=s.match(/^(
 function parseDur(s){s=String(s||'').trim();if(!s)return 0;const neg=/^[-−]/.test(s);s=s.replace(/^[-−+]/,'');let v;if(s.includes(':')){const [a,b]=s.split(':');v=(+a||0)+(+b||0)/60;}else v=parseNum(s);return neg?-v:v;}
 const toTimeInput=x=>{if(x==null)return '';let v=Math.round(x*60)%1440;return pad(Math.floor(v/60))+':'+pad(v%60);};
 const wComplete=e=>e.in!=null&&e.out!=null;
-function wTotal(e){if(e.volno)return 0;if(e.in!=null&&e.out==null)return null;return (wComplete(e)?e.out-e.in:0)-(+e.off||0);}
-const wWorkday=e=>!e.volno&&!isWeekend(e.date)&&wComplete(e);
+function wTotal(e){if(isVac(e)||isUnpaid(e))return 0;if(e.in!=null&&e.out==null)return null;return (wComplete(e)?e.out-e.in:0)-(+e.off||0);}
+const wWorkday=e=>!isWeekend(e.date)&&(isUnpaid(e)||(!isVac(e)&&wComplete(e)));
+const wTimed=e=>!isWeekend(e.date)&&!e.type&&wComplete(e);
 function wStats(list){
-  const done=list.filter(e=>wTotal(e)!=null),wd=list.filter(wWorkday),we=done.filter(e=>isWeekend(e.date)&&!e.volno);
+  const done=list.filter(e=>wTotal(e)!=null),wd=list.filter(wWorkday),tm=list.filter(wTimed),we=done.filter(e=>isWeekend(e.date)&&!e.type);
   const sum=done.reduce((a,e)=>a+wTotal(e),0),weH=we.reduce((a,e)=>a+wTotal(e),0);
   const pick=(arr,f,cmp)=>arr.reduce((b,e)=>b==null||cmp(f(e),f(b))?e:b,null);
   const avg=(arr,f)=>arr.length?arr.reduce((a,e)=>a+f(e),0)/arr.length:null;
-  return{sum,days:wd.length,avg:wd.length?sum/wd.length:null,weH,weDays:we.length,volno:list.filter(e=>e.volno).length,
-    avgIn:avg(wd,e=>e.in),avgOut:avg(wd,e=>e.out),
-    firstIn:pick(wd,e=>e.in,(a,b)=>a<b),lastIn:pick(wd,e=>e.in,(a,b)=>a>b),firstOut:pick(wd,e=>e.out,(a,b)=>a<b),lastOut:pick(wd,e=>e.out,(a,b)=>a>b),
-    longest:pick(done.filter(e=>!e.volno),wTotal,(a,b)=>a>b)};
+  return{sum,days:wd.length,avg:wd.length?sum/wd.length:null,weH,weDays:we.length,vac:list.filter(e=>isVac(e)&&!isWeekend(e.date)).length,unpaid:list.filter(e=>isUnpaid(e)&&!isWeekend(e.date)).length,
+    avgIn:avg(tm,e=>e.in),avgOut:avg(tm,e=>e.out),
+    firstIn:pick(tm,e=>e.in,(a,b)=>a<b),lastIn:pick(tm,e=>e.in,(a,b)=>a>b),firstOut:pick(tm,e=>e.out,(a,b)=>a<b),lastOut:pick(tm,e=>e.out,(a,b)=>a>b),
+    longest:pick(done.filter(e=>!e.type),wTotal,(a,b)=>a>b)};
 }
 const wMonth=k=>WK().filter(e=>ymOf(e.date)===k).sort((a,b)=>a.date.localeCompare(b.date));
 const wFmtH=h=>h==null?'—':`${fmtNum(h)} h`;
@@ -1294,7 +1307,8 @@ function workSpanChart(k){
   let bars='';
   for(let d=1;d<=dim;d++){const iso=`${y}-${pad(m)}-${pad(d)}`,e=by[iso],cx=L+slot*(d-0.5),we=isWeekend(iso);
     if(we)bars+=`<rect x="${L+slot*(d-1)}" y="${T}" width="${slot}" height="${ph}" class="wk-we"/>`;
-    if(e&&e.volno)bars+=`<text x="${cx}" y="${T+ph/2}" class="ax" text-anchor="middle">vol</text>`;
+    if(e&&isVac(e))bars+=`<rect x="${(cx-7).toFixed(1)}" y="${T}" width="14" height="${ph}" rx="3" class="wk-bar vac" data-act="work-day" data-date="${iso}"><title>${d}. ${m}. · dovolená</title></rect><text x="${cx}" y="${T+ph/2}" class="tv sm vac" text-anchor="middle" transform="rotate(-90 ${cx} ${T+ph/2})">dovolená</text>`;
+    else if(e&&isUnpaid(e))bars+=`<rect x="${(cx-7).toFixed(1)}" y="${T+ph-3}" width="14" height="3" class="wk-bar short" data-act="work-day" data-date="${iso}"><title>${d}. ${m}. · neplacené volno (0 h)</title></rect><text x="${cx}" y="${T+ph-8}" class="tv sm" text-anchor="middle">0</text>`;
     else if(e&&e.in!=null){const out=e.out!=null?e.out:Math.max(e.in+0.25,nowHours(iso)),t=wTotal(e),cls=e.out==null?'wip':t>=10?'long':t>=7.5?'ok':'short';
       bars+=`<rect x="${(cx-7).toFixed(1)}" y="${Y(e.in).toFixed(1)}" width="14" height="${Math.max(2,Y(out)-Y(e.in)).toFixed(1)}" rx="3" class="wk-bar ${cls}" data-act="work-day" data-date="${iso}"><title>${d}. ${m}. ${wdOf(iso)} · ${hm(e.in)}–${e.out!=null?hm(e.out):'v práci'}${e.off?' · pauza '+hmDur(e.off):''} · ${t!=null?hmDur(t)+' h':''}${e.note?' · '+esc(e.note):''}</title></rect>`;
       if(t!=null)bars+=`<text x="${cx}" y="${Y(out)+12}" class="tv sm" text-anchor="middle">${fmtNum(t)}</text>`;}
@@ -1311,6 +1325,7 @@ function workMonthsChart(keys){
   let g='';for(let v=0;v<=top;v+=2)g+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" class="gl${v===0?' base':''}"/><text x="${L-6}" y="${Y(v)+4}" class="ax" text-anchor="end">${v}</text>`;
   g+=`<line x1="${L}" x2="${W-R}" y1="${Y(8)}" y2="${Y(8)}" class="capl"/><text x="${W-R}" y="${Y(8)-5}" class="capt" text-anchor="end">8 h</text>`;
   let bars='';data.forEach((x,i)=>{const cx=L+slot*(i+0.5),a=x.s.avg;if(a!=null){bars+=`<rect x="${cx-12}" y="${Y(a)}" width="24" height="${Y(0)-Y(a)}" rx="3" class="wk-bar ${a>=10?'long':a>=7.5?'ok':'short'}" data-act="work-month" data-k="${x.k}"><title>${cap1(MONTHS[ymM(x.k)-1])} ${ymY(x.k)}: Ø ${fmtNum(a)} h/den · ${x.s.days} dní · celkem ${fmtNum(x.s.sum)} h</title></rect><text x="${cx}" y="${Y(a)-5}" class="tv" text-anchor="middle">${fmtNum(a)}</text>`;}
+    if(x.s.vac)bars+=`<text x="${cx}" y="${Y(0)-6}" class="tv sm vac" text-anchor="middle">🌴${x.s.vac}</text>`;
     bars+=`<text x="${cx}" y="${H-B+16}" class="ax" text-anchor="middle">${MONTHS_S[ymM(x.k)-1]}${ymM(x.k)===1||i===0?' ’'+String(ymY(x.k)).slice(2):''}</text>`;});
   return `<div class="chart-scroll" data-sx="${W}" data-w="${W}"><svg class="chart" viewBox="0 0 ${W} ${H}" style="min-width:${W}px" role="img" aria-label="Průměr hodin na den po měsících">${g}${bars}</svg></div>`;
 }
@@ -1319,21 +1334,23 @@ function viewWork(){
   const today=todayISO(),te=all.find(e=>e.date===today);
   const keysAll=[...new Set(all.map(e=>ymOf(e.date)))].sort((a,b)=>a-b);
   const from=keysAll.length?Math.max(keysAll[0],ymNow()-23):ymNow(),keys=[];for(let x=from;x<=ymNow();x++)keys.push(x);
+  const vacYear=all.filter(e=>isVac(e)&&!isWeekend(e.date)&&+e.date.slice(0,4)===ymY(k)).length;
   const y12=[];for(let x=ymNow()-11;x<=ymNow();x++)y12.push(...wMonth(x));const s12=wStats(y12),sAll=wStats(all);
   const dimN=new Date(Date.UTC(ymY(k),ymM(k),0)).getUTCDate(),first=(new Date(Date.UTC(ymY(k),ymM(k)-1,1)).getUTCDay()+6)%7,by={};list.forEach(e=>by[e.date]=e);
   let cal='';for(let i=0;i<first;i++)cal+='<div class="cal-e"></div>';
   for(let d=1;d<=dimN;d++){const iso=`${ymY(k)}-${pad(ymM(k))}-${pad(d)}`,e=by[iso],t=e?wTotal(e):null,we=isWeekend(iso);
-    cal+=`<button class="cal-d wk-d${we?' we':''}${iso===today?' td-today':''}${e?' on':''}${e&&e.volno?' volno':''}" data-act="work-day" data-date="${iso}"><span class="cal-n">${d}</span>${e?(e.volno?'<b class="muted">volno</b>':`<b>${t!=null?hmDur(t):'v práci'}</b><small>${e.in!=null?hm(e.in,false)+'–'+(e.out!=null?hm(e.out):'…'):'přidáno'}${e.off?` · ${e.off<0?'+':'−'}${hmDur(Math.abs(e.off))}`:''}</small>`):''}</button>`;}
+    cal+=`<button class="cal-d wk-d${we?' we':''}${iso===today?' td-today':''}${e?' on':''}${e&&isVac(e)?' vac':''}${e&&isUnpaid(e)?' unpaid':''}" data-act="work-day" data-date="${iso}"><span class="cal-n">${d}</span>${e?(isVac(e)?'<b>dovolená</b>':isUnpaid(e)?'<b>0 h</b><small>neplacené volno</small>':`<b>${t!=null?hmDur(t):'v práci'}</b><small>${e.in!=null?hm(e.in,false)+'–'+(e.out!=null?hm(e.out):'…'):'přidáno'}${e.off?` · ${e.off<0?'+':'−'}${hmDur(Math.abs(e.off))}`:''}</small>`):''}</button>`;}
   const fact=(lab,e,f)=>`<div><dt>${lab}</dt><dd>${e?hm(f(e)):'—'}</dd>${e?`<span>${fmtDate(e.date)} · ${wdOf(e.date)}</span>`:''}</div>`;
-  const rows=keys.slice().reverse().map(x=>{const s=wStats(wMonth(x));if(!s.days&&!s.sum)return '';return `<tr><th scope="row"><button class="linkish" data-act="work-month" data-k="${x}">${cap1(MONTHS[ymM(x)-1])} ${ymY(x)}</button></th><td class="num">${s.days}</td><td class="num">${fmtNum(s.sum)} h</td><td class="num"><b>${s.avg!=null?fmtNum(s.avg):'—'}</b></td><td class="num">${hm(s.avgIn)}</td><td class="num">${hm(s.avgOut)}</td><td class="num">${s.firstIn?hm(s.firstIn.in):'—'}</td><td class="num">${s.lastOut?hm(s.lastOut.out):'—'}</td><td class="num">${s.weH?fmtNum(s.weH)+' h':'—'}</td></tr>`;}).join('');
+  const rows=keys.slice().reverse().map(x=>{const s=wStats(wMonth(x));if(!s.days&&!s.sum)return '';return `<tr><th scope="row"><button class="linkish" data-act="work-month" data-k="${x}">${cap1(MONTHS[ymM(x)-1])} ${ymY(x)}</button></th><td class="num">${s.days}</td><td class="num">${fmtNum(s.sum)} h</td><td class="num"><b>${s.avg!=null?fmtNum(s.avg):'—'}</b></td><td class="num">${hm(s.avgIn)}</td><td class="num">${hm(s.avgOut)}</td><td class="num">${s.firstIn?hm(s.firstIn.in):'—'}</td><td class="num">${s.lastOut?hm(s.lastOut.out):'—'}</td><td class="num">${s.weH?fmtNum(s.weH)+' h':'—'}</td><td class="num">${s.vac||'—'}</td></tr>`;}).join('');
   const qa=!te?`<button class="btn" data-act="work-now" data-w="in">Přicházím ${hm(roundNow(),false)}</button>`:te.out==null&&te.in!=null?`<button class="btn" data-act="work-now" data-w="out">Odcházím ${hm(roundNow(),false)}</button>`:'';
   return `<div class="view-head"><div><p class="eyebrow">Moje docházka</p><h1>Docházka</h1></div>
     <div class="view-tools">${qa}<button class="btn primary" data-act="work-day" data-date="${today}">+ Zapsat den</button><button class="btn ghost" data-act="work-import">Import</button></div></div>
   <div class="mnav big"><button class="gear" data-act="work-nav" data-d="-1" aria-label="Předchozí měsíc">‹</button><b>${cap1(MONTHS[ymM(k)-1])} ${ymY(k)}</b><button class="gear" data-act="work-nav" data-d="1" aria-label="Další měsíc">›</button>${k!==ymNow()?'<button class="btn sm ghost" data-act="work-nav" data-d="0">Tento měsíc</button>':''}</div>
   <dl class="kpis">
     <div class="kpi"><dt>Odpracováno</dt><dd>${fmtNum(st.sum)} <small>h · ${num1(st.sum/8)} d</small></dd></div>
-    <div class="kpi"><dt>Pracovní dny</dt><dd>${st.days}</dd>${st.volno?`<span class="hint">+ ${st.volno} ${plural(st.volno,'den','dny','dní')} volna</span>`:''}</div>
-    <div class="kpi"><dt>Ø na pracovní den</dt><dd class="lc ${st.avg==null?'':st.avg>=10?'bad':st.avg>=7.5?'ok':'mid'}">${st.avg!=null?fmtNum(st.avg)+' <small>h</small>':'—'}</dd><span class="hint">víkendy se přičítají, ale nepočítají jako den</span></div>
+    <div class="kpi"><dt>Pracovní dny</dt><dd>${st.days}</dd>${st.unpaid?`<span class="hint">z toho ${st.unpaid} neplaceného volna (0 h)</span>`:''}</div>
+    <div class="kpi"><dt>Dovolená</dt><dd class="lc ok">${st.vac} <small>${plural(st.vac,'den','dny','dní')}</small></dd><span class="hint">letos ${vacYear} ${plural(vacYear,'den','dny','dní')}</span></div>
+    <div class="kpi"><dt>Ø na pracovní den</dt><dd class="lc ${st.avg==null?'':st.avg>=10?'bad':st.avg>=7.5?'ok':'mid'}">${st.avg!=null?fmtNum(st.avg)+' <small>h</small>':'—'}</dd><span class="hint">víkendy se přičítají, dovolená se nepočítá</span></div>
     <div class="kpi"><dt>Víkendy</dt><dd>${st.weH?fmtNum(st.weH)+' <small>h</small>':'—'}</dd>${st.weDays?`<span class="hint">${st.weDays} ${plural(st.weDays,'den','dny','dní')}</span>`:''}</div>
     <div class="kpi"><dt>Ø příchod / odchod</dt><dd>${hm(st.avgIn)} <small>–</small> ${hm(st.avgOut)}</dd></div>
   </dl>
@@ -1342,11 +1359,12 @@ function viewWork(){
   <div class="detail"><div>
     <section class="card"><div class="card-h"><h2>Kalendář</h2><span class="hint">klepněte na den pro zápis</span></div><div class="cal">${['po','út','st','čt','pá','so','ne'].map(x=>`<div class="cal-w">${x}</div>`).join('')}${cal}</div></section>
     <section class="card"><div class="card-h"><h2>Ø hodin na pracovní den po měsících</h2></div>${workMonthsChart(keys)}</section>
-    <section class="card"><div class="card-h"><h2>Přehled po měsících</h2></div><div class="tscroll"><table class="tbl compact"><thead><tr><th>Měsíc</th><th class="num">Dny</th><th class="num">Celkem</th><th class="num">Ø/den</th><th class="num">Ø příchod</th><th class="num">Ø odchod</th><th class="num">Nejdřív</th><th class="num">Nejpozději</th><th class="num">Víkendy</th></tr></thead><tbody>${rows||'<tr><td colspan="9" class="faint">Zatím žádné záznamy.</td></tr>'}</tbody></table></div></section>
+    <section class="card"><div class="card-h"><h2>Přehled po měsících</h2></div><div class="tscroll"><table class="tbl compact"><thead><tr><th>Měsíc</th><th class="num">Dny</th><th class="num">Celkem</th><th class="num">Ø/den</th><th class="num">Ø příchod</th><th class="num">Ø odchod</th><th class="num">Nejdřív</th><th class="num">Nejpozději</th><th class="num">Víkendy</th><th class="num">Dovolená</th></tr></thead><tbody>${rows||'<tr><td colspan="10" class="faint">Zatím žádné záznamy.</td></tr>'}</tbody></table></div></section>
   </div><div>
     <section class="card"><div class="card-h"><h2>Dlouhodobě</h2></div><dl class="facts one">
       <div><dt>Ø na den · posledních 12 měsíců</dt><dd>${s12.avg!=null?fmtNum(s12.avg)+' h':'—'}</dd><span>${s12.days} pracovních dní · ${fmtNum(s12.sum)} h</span></div>
       <div><dt>Ø příchod / odchod · 12 měsíců</dt><dd>${hm(s12.avgIn)} – ${hm(s12.avgOut)}</dd></div>
+      <div><dt>Dovolená ${ymY(k)}</dt><dd>${vacYear} ${plural(vacYear,'den','dny','dní')}</dd>${(()=>{const p=all.filter(e=>isVac(e)&&!isWeekend(e.date)&&+e.date.slice(0,4)===ymY(k)-1).length;return p?`<span>${ymY(k)-1}: ${p} ${plural(p,'den','dny','dní')}</span>`:'';})()}</div>
       <div><dt>Ø na den · celkově</dt><dd>${sAll.avg!=null?fmtNum(sAll.avg)+' h':'—'}</dd><span>${sAll.days} pracovních dní od ${all.length?fmtDate(all.map(e=>e.date).sort()[0]):'—'}</span></div>
     </dl></section>
   </div></div>`;
@@ -1360,20 +1378,25 @@ function openWorkDay(iso){
     <label class="fld grow"><span>Odchod <i>po půlnoci = další den</i></span><input class="inp" type="time" name="out" id="fw-out" value="${e?toTimeInput(e.out):''}"></label>
     <label class="fld w-sm"><span>Pauza <i>h:mm</i></span><input class="inp" name="off" id="fw-off" inputmode="decimal" placeholder="0:00" value="${e&&e.off?hmDur(e.off).replace('−','-'):''}" autocomplete="off"></label></div>
     <label class="fld"><span>Poznámka <i>nepovinné</i></span><input class="inp" name="note" id="fw-note" value="${esc(e&&e.note||'')}" autocomplete="off"></label>
-    <label class="chk"><input type="checkbox" name="volno" id="fw-volno" ${e&&e.volno?'checked':''}> Volno (dovolená, svátek, nemoc) – do průměrů se nepočítá</label>
+    <div class="fld"><span>Typ dne</span><div class="seg wk-type" role="radiogroup">${[['','Práce'],['dovolena','Dovolená'],['neplaceno','Neplacené volno (0 h)']].map(([v,l])=>`<label><input type="radio" name="type" value="${v}" ${((e&&e.type)||'')===v?'checked':''}><span>${l}</span></label>`).join('')}</div>
+      <p class="hint" id="fw-thint"></p></div>
     <div class="logtotal"><span>Odpracováno</span><b id="fw-tot">—</b></div>
     ${footer('Uložit',e?'<button type="button" class="btn danger" id="fw-del">Smazat den</button>':'')}</form>`,{onMount(md){
     const f=md.querySelector('#fw'),E=f.elements;
     const calc=()=>{const tin=parseTime(E.in.value);let tout=parseTime(E.out.value);if(tin!=null&&tout!=null&&tout<=tin)tout+=24;const off=parseDur(E.off.value);
       md.querySelector('#fw-wd').textContent=E.date.value?(isWeekend(E.date.value)?'víkend – hodiny se přičtou, den se do průměru nepočítá':WDS[new Date(E.date.value+'T12:00').getDay()]):'';
-      md.querySelector('#fw-tot').textContent=E.volno.checked?'volno':tin!=null&&tout!=null?hmDur(tout-tin-off)+' h':off<0?hmDur(-off)+' h':tin!=null?'v práci':'—';return{tin,tout,off};};
+      const ty=(f.querySelector('input[name=type]:checked')||{}).value||'';
+      md.querySelector('#fw-thint').textContent=ty==='dovolena'?'Dovolená se eviduje zvlášť a do průměru hodin se nepočítá.':ty==='neplaceno'?'Den se počítá jako pracovní s 0 h, takže snižuje průměr – dopracuješ ho jindy.':'';
+      f.querySelectorAll('#fw-in,#fw-out,#fw-off').forEach(i=>i.disabled=!!ty);
+      md.querySelector('#fw-tot').textContent=ty==='dovolena'?'dovolená':ty==='neplaceno'?'0 h':tin!=null&&tout!=null?hmDur(tout-tin-off)+' h':off<0?hmDur(-off)+' h':tin!=null?'v práci':'—';return{tin,tout,off};};
     f.addEventListener('input',calc);calc();
     const del=md.querySelector('#fw-del');if(del)del.addEventListener('click',()=>{if(!armed(del,'Opravdu smazat?'))return;state.worklog=WK().filter(x=>x!==e);closeModal();commit('Den smazán');});
     f.addEventListener('submit',ev=>{ev.preventDefault();const {tin,tout,off}=calc(),date=E.date.value;if(!date)return;
-      const rec={date,in:E.volno.checked?null:tin,out:E.volno.checked?null:tout,off:E.volno.checked?0:off,note:E.note.value.trim(),volno:E.volno.checked};
-      if(!rec.volno&&rec.in==null&&rec.out==null&&!rec.off){toast('Zadejte příchod a odchod, nebo zaškrtněte volno');return;}
+      const ty=(f.querySelector('input[name=type]:checked')||{}).value||'';
+      const rec={date,in:ty?null:tin,out:ty?null:tout,off:ty?0:off,note:E.note.value.trim(),type:ty||undefined};
+      if(!ty&&rec.in==null&&rec.out==null&&!rec.off){toast('Zadejte příchod a odchod, nebo zvolte typ dne');return;}
       const ex=WK().find(x=>x.date===date&&x!==e);if(ex){state.worklog=WK().filter(x=>x!==ex);}
-      if(e)Object.assign(e,rec);else WK().push({id:uid(),...rec});
+      if(e){Object.assign(e,rec);if(!ty)delete e.type;}else{const n={id:uid(),...rec};if(!ty)delete n.type;WK().push(n);}
       ui.workK=ymOf(date);closeModal();commit('Uloženo');});
   }});
 }
@@ -1384,12 +1407,12 @@ function openWorkImport(){
     let data=null;const err=m.querySelector('#wi-err'),go=m.querySelector('#wi-go');
     m.querySelector('#wi-file').addEventListener('change',e=>{const fl=e.target.files[0];if(!fl)return;const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);data=Array.isArray(j)?j:(j.entries||j.worklog);if(!Array.isArray(data))throw 0;err.hidden=true;go.disabled=false;go.textContent=`Importovat ${data.length} dní`;}catch(x){err.textContent='Soubor se nepodařilo přečíst.';err.hidden=false;go.disabled=true;}};r.readAsText(fl);});
     go.addEventListener('click',()=>{if(!data)return;const have=new Set(WK().map(e=>e.date));let n=0;
-      data.forEach(e=>{if(!e||!/^\d{4}-\d{2}-\d{2}$/.test(e.date)||have.has(e.date))return;WK().push({id:uid(),date:e.date,in:e.in??null,out:e.out??null,off:+e.off||0,note:e.note||'',volno:!!e.volno});have.add(e.date);n++;});
+      data.forEach(e=>{if(!e||!/^\d{4}-\d{2}-\d{2}$/.test(e.date)||have.has(e.date))return;const n={id:uid(),date:e.date,in:e.in??null,out:e.out??null,off:+e.off||0,note:e.note||''};const ty=e.type||(e.volno?'dovolena':'');if(ty)n.type=ty;WK().push(n);have.add(e.date);n++;});
       closeModal();commit(`Importováno ${n} dní`);});
   }});
 }
 function workNow(w){const t=todayISO(),v=roundNow();let e=WK().find(x=>x.date===t);
-  if(w==='in'){if(!e){WK().push({id:uid(),date:t,in:v,out:null,off:0,note:'',volno:false});}else e.in=v;commit(`Příchod ${hm(v)}`);}
+  if(w==='in'){if(!e){WK().push({id:uid(),date:t,in:v,out:null,off:0,note:''});}else e.in=v;commit(`Příchod ${hm(v)}`);}
   else if(e){e.out=v<=e.in?v+24:v;commit(`Odchod ${hm(e.out)} · ${hmDur(wTotal(e))} h`);}}
 
 /* ---------- render & navigation ---------- */
