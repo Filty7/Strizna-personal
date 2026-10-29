@@ -168,6 +168,7 @@ textarea.inp{resize:vertical;line-height:1.45}
 .wk-bar{fill:var(--accent);pointer-events:none}
 .wk-bar.work{fill:var(--accent)} .wk-bar.wip{fill:var(--accent);opacity:.45}
 .wk-bar.wkend{fill:#9aa0a8;opacity:.28}
+.wk-bar.pause{fill:#8a6a2c} .wk-bar.pause.we{fill:#6b6f76;opacity:.5}
 .wk-bar.vac{fill:var(--vac)} .wk-bar.unpaid{fill:var(--unpaid)}
 .wk-bar.prev{fill:var(--muted);opacity:.45}
 .chart .gl.key{stroke:var(--line-2)} .chart .ax.key{fill:var(--fg);font-weight:600}
@@ -1341,12 +1342,13 @@ function workSpanChart(k){
     g+=`<line x1="${L}" x2="${W-R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" class="gl${key?' key':''}${mid?' mid':''}"/><text x="${L-6}" y="${(Y(v)+4).toFixed(1)}" class="ax${key?' key':''}${mid?' mid':''}" text-anchor="end">${mid?'půlnoc':(v%24)+':00'}</text>`;}
   let bars='',hits='';
   for(let d=1;d<=dim;d++){const iso=`${y}-${pad(m)}-${pad(d)}`,e=by[iso],cx=L+slot*(d-0.5),we=isWeekend(iso),x0=(cx-bw/2).toFixed(1);
-    hits+=`<rect x="${(L+slot*(d-1)).toFixed(1)}" y="${T}" width="${slot.toFixed(1)}" height="${ph}" class="wk-hit" data-act="work-day" data-date="${iso}"><title>${d}. ${m}. ${wdOf(iso)}${e?'':' · zapsat'}</title></rect>`;
+    hits+=`<rect x="${(L+slot*(d-1)).toFixed(1)}" y="${T}" width="${slot.toFixed(1)}" height="${ph}" class="wk-hit" data-act="work-day" data-date="${iso}"><title>${d}. ${m}. ${wdOf(iso)}${e?(+e.off>0?` · pauza ${hmDur(+e.off)} h`:''):' · zapsat'}</title></rect>`;
     if(e&&isVac(e)){bars+=`<rect x="${x0}" y="${T}" width="${bw.toFixed(1)}" height="${ph}" rx="3" class="wk-bar vac"/>`;
       if(wComplete(e))bars+=`<rect x="${(cx-bw/4).toFixed(1)}" y="${Y(e.out).toFixed(1)}" width="${(bw/2).toFixed(1)}" height="${Math.max(2,Y(e.in)-Y(e.out)).toFixed(1)}" rx="2" class="wk-bar wkend"/>`;}
     else if(e&&isUnpaid(e))bars+=`<rect x="${x0}" y="${T}" width="${bw.toFixed(1)}" height="${ph}" rx="3" class="wk-bar unpaid"/>`;
     else if(e&&e.in!=null){const out=e.out!=null?e.out:Math.max(e.in+0.25,nowHours(iso)),t=wTotal(e);
       bars+=`<rect x="${x0}" y="${Y(out).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(2,Y(e.in)-Y(out)).toFixed(1)}" rx="3" class="wk-bar ${we?'wkend':e.out==null?'wip':'work'}"/>`;
+      const po=Math.min(+e.off||0,out-e.in);if(po>0)bars+=`<rect x="${x0}" y="${Y(e.in+po).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1.5,Y(e.in)-Y(e.in+po)).toFixed(1)}" rx="3" class="wk-bar pause${we?' we':''}"/>`;
       if(t!=null&&!we)bars+=`<text x="${cx.toFixed(1)}" y="${(Y(out)-5).toFixed(1)}" class="tv sm" text-anchor="middle">${fmtNum(t)}</text>`;}
     else if(e&&wTotal(e))bars+=`<text x="${cx.toFixed(1)}" y="${T+ph-6}" class="tv sm" text-anchor="middle">+${fmtNum(wTotal(e))}</text>`;
     bars+=`<text x="${cx.toFixed(1)}" y="${H-B+16}" class="ax${we?' we':''}${iso===today?' key':''}" text-anchor="middle">${d}</text>`;}
@@ -1414,7 +1416,7 @@ function viewWork(){
     <div class="kpi"><dt>Dovolená</dt><dd class="lc ok">${st.vac} <small>${plural(st.vac,'den','dny','dní')}</small></dd></div>
   </dl>
   <section class="card"><div class="card-h"><h2>Příchody a odchody</h2><div class="legend">
-    <span><i class="dot" style="--c:var(--accent)"></i>práce</span><span><i class="dot" style="--c:var(--vac)"></i>dovolená</span><span><i class="dot" style="--c:var(--unpaid)"></i>neplacené volno</span><span><i class="dot wk-we-dot"></i>víkend</span>
+    <span><i class="dot" style="--c:var(--accent)"></i>práce</span><span><i class="dot" style="--c:#8a6a2c"></i>pauza</span><span><i class="dot" style="--c:var(--vac)"></i>dovolená</span><span><i class="dot" style="--c:var(--unpaid)"></i>neplacené volno</span><span><i class="dot wk-we-dot"></i>víkend</span>
     <span class="avg-lg in">Ø příchod ${hm(st.avgIn)}</span><span class="avg-lg out">Ø odchod ${hm(st.avgOut)}</span></div></div>
     ${workSpanChart(k)}<p class="hint">Klepnutím na den ho zapíšete nebo upravíte. Víkendová práce je jen naznačená, do průměru příchodů a odchodů se nepočítá.</p></section>
   <section class="card"><div class="card-h"><h2>Rok ${yy} po měsících</h2><div class="view-tools">
