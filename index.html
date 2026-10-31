@@ -218,7 +218,7 @@ textarea.inp{resize:vertical;line-height:1.45}
 .chk{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted)}
 .chk input{accent-color:var(--accent);width:16px;height:16px}
 .lc{font-weight:600}
-.lc.ok,.lc.ok b{color:var(--ok)} .lc.mid,.lc.mid b{color:var(--accent)} .lc.bad,.lc.bad b{color:var(--bad)}
+.lc.ok,.lc.ok b{color:var(--ok)} .kpi dd .ok{color:var(--ok)} .kpi dd .unp{color:#5fb3bf} .lc.mid,.lc.mid b{color:var(--accent)} .lc.bad,.lc.bad b{color:var(--bad)}
 .lc small{color:var(--muted)}
 .hc{display:inline-grid;place-items:center;min-width:34px;padding:3px 6px;border-radius:6px;font-weight:700;font-size:12px}
 .hc.fc{border:1px dashed color-mix(in srgb,currentColor 45%,transparent);background-color:transparent}
@@ -1413,7 +1413,8 @@ function viewWork(){
     <div class="kpi"><dt>Ø hodin na den</dt><dd class="lc">${st.avg!=null?fmtNum(st.avg)+' <small>h</small>':'—'}</dd><span class="hint">celkem ${fmtNum(st.sum)} h${st.weH?` · z toho víkendy ${fmtNum(st.weH)} h`:''}</span></div>
     <div class="kpi"><dt>Ø příchod</dt><dd>${hm(st.avgIn)}</dd><span class="hint">${range(st.firstIn&&st.firstIn.in,st.lastIn&&st.lastIn.in)}</span></div>
     <div class="kpi"><dt>Ø odchod</dt><dd>${hm(st.avgOut)}</dd><span class="hint">${range(st.firstOut&&st.firstOut.out,st.lastOut&&st.lastOut.out)}</span></div>
-    <div class="kpi"><dt>Dovolená</dt><dd class="lc ok">${st.vac} <small>${plural(st.vac,'den','dny','dní')}</small></dd></div>
+    ${(()=>{const yl=all.filter(e=>+e.date.slice(0,4)===ymY(k)&&!isWeekend(e.date)),yv=yl.filter(isVac).length,yu=yl.filter(isUnpaid).length;
+      return `<div class="kpi"><dt>Dovolená / neplacené volno</dt><dd class="lc"><span class="ok">${st.vac}</span> <small>${plural(st.vac,'den','dny','dní')}</small> / <span class="unp">${st.unpaid}</span> <small>${plural(st.unpaid,'den','dny','dní')}</small></dd><span class="hint">celkem za rok ${ymY(k)}: ${yv} ${plural(yv,'den','dny','dní')} / ${yu} ${plural(yu,'den','dny','dní')}</span></div>`;})()}
   </dl>
   <section class="card"><div class="card-h"><h2>Příchody a odchody</h2><div class="legend">
     <span><i class="dot" style="--c:var(--accent)"></i>práce</span><span><i class="dot" style="--c:#8a6a2c"></i>pauza</span><span><i class="dot" style="--c:var(--vac)"></i>dovolená</span><span><i class="dot" style="--c:var(--unpaid)"></i>neplacené volno</span><span><i class="dot wk-we-dot"></i>víkend</span>
