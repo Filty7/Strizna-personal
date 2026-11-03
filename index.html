@@ -890,7 +890,7 @@ function schedule(){
     if(!T)act.forEach(m=>{tot[m.personId]=1;T+=1;});
     const remH=pi.remaining*(+p.hoursPerDay||8);
     let last=null;if(p.deadline&&ymOf(p.deadline)>=now)last=ymOf(p.deadline);
-    const pastDue=!!(p.deadline&&ymOf(p.deadline)<now);
+    const pastDue=!!(p.deadline&&ymOf(p.deadline)<now);if(pastDue)last=now;
     act.forEach(m=>{if(!tot[m.personId])return;const days=remH*tot[m.personId]/T/whd(m);if(days<0.01)return;
       let r=0,n=0;for(let k=now-WIN;k<now;k++){if(k<ymOf(p.created)||!memberInMonth(m,k))continue;n++;r+=p.logs.reduce((a,l)=>l.personId===m.personId&&ym(l.year,l.month)===k?a+l.hours:a,0)/whd(m);}
       (byPerson[m.personId]=byPerson[m.personId]||[]).push({p,m,days,last,pastDue,rate:n?r/n:0});});
@@ -903,12 +903,12 @@ function schedule(){
     rem[now]=Math.max(0,Math.min(cap-used,cap*frac));wt[now]=frac;
     const add=(t,k,d)=>{if(d<0.005)return;const key=t.p.id;(res[key]=res[key]||[]).push({k,pid,hours:d*whd(t.m),m:t.m});};
     const range=(a,b)=>{const o=[];for(let k=a;k<=b;k++)o.push(k);return o;};
-    const dl=tasks.filter(t=>t.last!=null).sort((a,b)=>a.last-b.last||b.days-a.days);
+    const dl=tasks.filter(t=>t.last!=null).sort((a,b)=>(b.pastDue-a.pastDue)||a.last-b.last||b.days-a.days);
     dl.forEach(t=>{const ks=range(now,t.last),{alloc,over}=waterfill(t.days,ks,rem);
       ks.forEach(k=>{rem[k]-=alloc[k];add(t,k,alloc[k]);});
       if(over>0){const W=ks.reduce((a,k)=>a+wt[k],0)||1;ks.forEach(k=>{const d=over*wt[k]/W;rem[k]-=d;add(t,k,d);});}});
-    const fl=tasks.filter(t=>t.last==null).sort((a,b)=>(b.pastDue-a.pastDue)||a.p.created.localeCompare(b.p.created));
-    fl.forEach(t=>{const pace=t.pastDue?cap:(t.rate>0.05?t.rate:Math.max(1,cap/4));let W=Math.max(1,Math.ceil(t.days/pace)),r;
+    const fl=tasks.filter(t=>t.last==null).sort((a,b)=>a.p.created.localeCompare(b.p.created));
+    fl.forEach(t=>{const pace=t.rate>0.05?t.rate:Math.max(1,cap/4);let W=Math.max(1,Math.ceil(t.days/pace)),r;
       for(;;){const ks=range(now,now+W-1);const free=ks.reduce((a,k)=>a+Math.max(0,rem[k]),0);if(free+1e-9>=t.days||W>=H){r=waterfill(t.days,ks,rem);
         ks.forEach(k=>{rem[k]-=r.alloc[k];add(t,k,r.alloc[k]);});
         if(r.over>0){const Wt=ks.reduce((a,k)=>a+wt[k],0)||1;ks.forEach(k=>{const d=r.over*wt[k]/Wt;rem[k]-=d;add(t,k,d);});}
