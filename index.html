@@ -675,10 +675,11 @@ function applyPatches(){const done=state.appliedPatches||(state.appliedPatches=[
 const dailyOf=p=>p.daily||(p.daily=[]);
 function dailySum(p,pid,y,m){return dailyOf(p).reduce((a,e)=>e.personId===pid&&+e.date.slice(0,4)===y&&+e.date.slice(5,7)===m?a+e.hours:a,0);}
 function rollupDaily(){let ch=false;const now=ymNow();
-  state.projects.forEach(p=>{const g={};dailyOf(p).forEach(e=>{const k=ymOf(e.date);if(k>=now)return;const key=e.personId+'|'+k;g[key]=(g[key]||0)+e.hours;});
+  state.projects.forEach(p=>{const g={};dailyOf(p).forEach(e=>{const k=ymOf(e.date);if(k>now)return;const key=e.personId+'|'+k;g[key]=(g[key]||0)+e.hours;});
     Object.entries(g).forEach(([key,h])=>{const [pid,k]=key.split('|');const y=ymY(+k),m=ymM(+k);const l=p.logs.find(x=>x.personId===pid&&x.year===y&&x.month===m);
       if(!l){p.logs.push({id:uid(),personId:pid,year:y,month:m,hours:Math.round(h*100)/100,auto:true});ch=true;}
-      else if(l.auto&&Math.abs(l.hours-h)>0.001){l.hours=Math.round(h*100)/100;ch=true;}});});
+      else if(l.auto&&Math.abs(l.hours-h)>0.001){l.hours=Math.round(h*100)/100;ch=true;}});
+    const n0=p.logs.length;p.logs=p.logs.filter(l=>!(l.auto&&!g[l.personId+'|'+ym(l.year,l.month)]));if(p.logs.length!==n0)ch=true;});
   if(ch)save();}
 function save(){invalidateSched();try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}if(APP.cloud)cloudQueue();}
 
@@ -900,10 +901,10 @@ function schedule(){
     const cap=capOf(getPer(pid)),rem={},wt={};
     let used=0;state.projects.forEach(p=>{if(p.status!=='active')return;const m=p.members.find(x=>x.personId===pid);if(!m)return;used+=Math.max(logH(p,pid,ymY(now),ymM(now)),dailySum(p,pid,ymY(now),ymM(now)))/whd(m);});
     for(let k=now;k<now+H;k++){rem[k]=cap;wt[k]=1;}
-    rem[now]=Math.max(0,Math.min(cap-used,cap*frac));wt[now]=frac;
+    rem[now]=Math.max(0,cap-used);wt[now]=Math.max(frac,0.5);
     const add=(t,k,d)=>{if(d<0.005)return;const key=t.p.id;(res[key]=res[key]||[]).push({k,pid,hours:d*whd(t.m),m:t.m});};
     const range=(a,b)=>{const o=[];for(let k=a;k<=b;k++)o.push(k);return o;};
-    const dl=tasks.filter(t=>t.last!=null).sort((a,b)=>(b.pastDue-a.pastDue)||a.last-b.last||b.days-a.days);
+    const dl=tasks.filter(t=>t.last!=null).sort((a,b)=>(b.pastDue-a.pastDue)||(a.p.deadline||'').localeCompare(b.p.deadline||'')||b.days-a.days);
     dl.forEach(t=>{const ks=range(now,t.last),{alloc,over}=waterfill(t.days,ks,rem);
       ks.forEach(k=>{rem[k]-=alloc[k];add(t,k,alloc[k]);});
       if(over>0){const W=ks.reduce((a,k)=>a+wt[k],0)||1;ks.forEach(k=>{const d=over*wt[k]/W;rem[k]-=d;add(t,k,d);});}});
@@ -1639,7 +1640,7 @@ function openDay(pid,perId,date){
       const ent=dailyOf(p).filter(e=>e.personId===pid2&&+e.date.slice(0,4)===y&&+e.date.slice(5,7)===m).sort((a,b)=>b.date.localeCompare(a.date));
       const sum=ent.reduce((a,e)=>a+e.hours,0),done=ym(y,m)<ymNow(),l=p.logs.find(x=>x.personId===pid2&&x.year===y&&x.month===m);
       list.innerHTML=`<div class="dlist-h"><b>${cap1(MONTHS[m-1])} ${y}</b><span>${fmtNum(sum)} h · ${num1(sum/whd(p.members.find(x=>x.personId===pid2)))} d</span></div>
-        <p class="hint">${done?(l?`Měsíc skončil. V měsíčním zápisu je ${fmtNum(l.hours)} h${l.auto?' (převzato z denních)':''}.`:'Měsíc skončil.'):'Měsíc probíhá, zatím se nezapočítává do statistik.'}</p>
+        <p class="hint">${done?(l?`Měsíc skončil. V měsíčním zápisu je ${fmtNum(l.hours)} h${l.auto?' (převzato z denních)':''}.`:'Měsíc skončil.'):'Měsíc probíhá – denní zápisy se průběžně započítávají do grafů a statistik.'}</p>
         ${ent.length?`<ul class="dlist">${ent.map(e=>`<li><button type="button" class="dl-day" data-date="${e.date}"><span class="mono">${fmtDate(e.date)}</span><span class="faint">${['ne','po','út','st','čt','pá','so'][new Date(e.date+'T12:00').getDay()]}</span><span class="dl-note">${esc(e.note||'')}</span><b>${fmtNum(e.hours)} h</b></button><button type="button" class="x" data-del="${e.id}">Smazat</button></li>`).join('')}</ul>`:'<p class="faint">V tomto měsíci zatím žádné denní zápisy.</p>'}`;
       const c=cur();E.h.value=c?String(c.hours).replace('.',','):'';E.note.value=c?c.note||'':'';md.querySelector('#fd-save').textContent=c?'Uložit změnu':'Uložit den';};
     E.who.addEventListener('change',()=>{ui.dayPid=E.who.value;draw();});E.date.addEventListener('change',draw);
