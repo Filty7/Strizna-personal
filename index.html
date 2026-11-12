@@ -353,6 +353,8 @@ textarea.inp{resize:vertical;line-height:1.45}
 .chart .avgl{stroke:var(--accent);stroke-dasharray:4 4;stroke-width:1;opacity:.7}
 .chart .avgt{fill:var(--accent);font-family:var(--mono);font-size:11px}
 .legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted)}
+.card-h>.legend{flex:1 1 320px;min-width:0;justify-content:flex-end}
+.card-h>.legend>span{white-space:nowrap}
 .legend span{display:inline-flex;gap:6px;align-items:center}
 
 /* tables */
@@ -1141,7 +1143,7 @@ function viewPerson(id){
   const hs=personHistory(id),act=hs.filter(x=>x.p.status==='active'&&!x.m.removedAt),r=personRating(id);
   const totH=hs.reduce((a,x)=>a+x.h,0),totD=hs.reduce((a,x)=>a+x.d,0),totE=hs.reduce((a,x)=>a+x.earned,0),owe=hs.reduce((a,x)=>a+Math.max(0,x.bal||0),0);
   const copy=v=>`<button class="copy" data-act="copy" data-text="${esc(v)}">kopírovat</button>`,L=personLoad(id),n1=L.next[1];
-  const projIds=new Set(),nowK=ymNow();Object.entries(L.past).concat(Object.entries(L.fut)).forEach(([k,o])=>{if(+k>=nowK-WIN&&+k<nowK+WIN)Object.keys(o).forEach(id=>projIds.add(id));});const pcm=projColors(projIds);
+  const projIds=new Set(state.projects.filter(p=>p.status==='active'&&p.members.some(m=>m.personId===id&&!m.removedAt)).map(p=>p.id)),nowK=ymNow();Object.entries(L.past).concat(Object.entries(L.fut)).forEach(([k,o])=>{if(+k>=nowK-WIN&&+k<nowK+WIN)Object.keys(o).forEach(id=>projIds.add(id));});const pcm=projColors(projIds);
   return `<button class="linkback" data-act="back">← Zpět</button>
   <section class="ph"><div class="perhead">${avatar(per,'xl')}<div><p class="eyebrow">Adresář</p><h1>${esc(fullName(per))}</h1><div class="pos">${esc(per.position||'bez pozice')}</div></div></div>
     <div class="ph-actions"><div class="tagrow" aria-label="Barva">${TAGS.map(t=>`<button class="tagbtn" style="--c:${t.color}" title="${t.name}" aria-pressed="${t.id===per.tag}" data-act="set-tag" data-kind="person" data-id="${per.id}" data-tag="${t.id}"></button>`).join('')}</div>${unitSeg()}<button class="btn" data-act="edit-person" data-id="${per.id}">Upravit</button></div></section>
