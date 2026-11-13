@@ -680,7 +680,7 @@ function rollupDaily(){let ch=false;const now=ymNow();
   state.projects.forEach(p=>{const g={};dailyOf(p).forEach(e=>{const k=ymOf(e.date);if(k>now)return;const key=e.personId+'|'+k;g[key]=(g[key]||0)+e.hours;});
     Object.entries(g).forEach(([key,h])=>{const [pid,k]=key.split('|');const y=ymY(+k),m=ymM(+k);const l=p.logs.find(x=>x.personId===pid&&x.year===y&&x.month===m);
       if(!l){p.logs.push({id:uid(),personId:pid,year:y,month:m,hours:Math.round(h*100)/100,auto:true});ch=true;}
-      else if(l.auto&&Math.abs(l.hours-h)>0.001){l.hours=Math.round(h*100)/100;ch=true;}});
+      else if((l.auto||+k===now)&&(Math.abs(l.hours-h)>0.001||!l.auto)){l.hours=Math.round(h*100)/100;l.auto=true;ch=true;}});
     const n0=p.logs.length;p.logs=p.logs.filter(l=>!(l.auto&&!g[l.personId+'|'+ym(l.year,l.month)]));if(p.logs.length!==n0)ch=true;});
   if(ch)save();}
 function save(){invalidateSched();try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}if(APP.cloud)cloudQueue();}
