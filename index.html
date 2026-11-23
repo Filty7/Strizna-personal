@@ -1627,7 +1627,7 @@ function openLog(pid,y,mo){
 }
 function openDay(pid,perId,date){
   const p=getP(pid),act=activeMembers(p);if(!act.length){toast('Nejdřív přidejte lidi na projekt');return;}
-  let who=perId&&p.members.some(m=>m.personId===perId)?perId:(ui.dayPid&&act.some(m=>m.personId===ui.dayPid)?ui.dayPid:act[0].personId);
+  const ME='u001';let who=perId&&p.members.some(m=>m.personId===perId)?perId:act.some(m=>m.personId===ME)?ME:(ui.dayPid&&act.some(m=>m.personId===ui.dayPid)?ui.dayPid:act[0].personId);
   modal('Zapsat den',`<form id="fd" class="form"><p class="muted" style="margin-top:-4px"><i class="dot" style="--c:${tagColor(p.tag)}"></i> ${esc(p.name)}</p>
     <div class="frow" style="align-items:flex-end"><label class="fld grow"><span>Kdo</span><select class="inp" name="who" id="fd-who">${p.members.map(m=>`<option value="${m.personId}" ${m.personId===who?'selected':''}>${esc(fullName(getPer(m.personId)))}${m.removedAt?' (odebrán)':''}</option>`).join('')}</select></label>
     <label class="fld w-date"><span>Den</span><input class="inp" type="date" name="date" id="fd-date" value="${date||todayISO()}" required></label>
@@ -1635,7 +1635,7 @@ function openDay(pid,perId,date){
     <label class="fld"><span>Poznámka <i>nepovinné</i></span><input class="inp" name="note" id="fd-note" placeholder="co se dělalo" autocomplete="off"></label>
     <div class="row-end"><button class="btn primary" id="fd-save">Uložit den</button></div>
     <div id="fd-list"></div>
-    <footer class="m-foot"><span class="hint">Dokud měsíc běží, denní hodiny se do statistik nepočítají. Po jeho skončení se součet propíše do měsíčního zápisu, kde ho můžete upravit.</span><span class="spacer"></span><button type="button" class="btn ghost" data-act="close-modal">Hotovo</button></footer></form>`,{noFocus:true,onMount(md){
+    <footer class="m-foot"><span class="hint">Denní hodiny se průběžně sčítají do měsíčního zápisu, grafů i salda. Po skončení měsíce můžete měsíční součet upravit ručně.</span><span class="spacer"></span><button type="button" class="btn ghost" data-act="close-modal">Hotovo</button></footer></form>`,{noFocus:true,onMount(md){
     const f=md.querySelector('#fd'),E=f.elements,list=md.querySelector('#fd-list');
     const cur=()=>dailyOf(p).find(e=>e.personId===E.who.value&&e.date===E.date.value);
     const draw=()=>{const d=E.date.value||todayISO(),y=+d.slice(0,4),m=+d.slice(5,7),pid2=E.who.value;
